@@ -35,10 +35,21 @@ impl<T: Default + Clone> ArcBufferPool<T> {
         }
     }
 
-    pub fn put(&self, buffer: Arc<Vec<T>>) {
+    pub fn put(&self, mut buffer: Arc<Vec<T>>) {
         let mut pool = self.pool.lock().unwrap();
         println!("Buffer returned to pool");
         println!("Pool size: {}", pool.len());
+
+        assert_eq!(
+            Arc::strong_count(&buffer),
+            1,
+            "Buffer has more than one reference!"
+        );
+
+        // Clear values
+        Arc::make_mut(&mut buffer)
+            .iter_mut()
+            .for_each(|x| *x = T::default());
 
         pool.push(buffer);
     }
@@ -58,12 +69,14 @@ impl<T: Default + Clone> BufferGuard<T> {
 
 impl<T: Default + Clone> Drop for BufferGuard<T> {
     fn drop(&mut self) {
+        // Take buffer, leaving None in self
         let buf = self.buffer.take().expect("Buffer already taken!");
 
+        // If this is the last reference to the buffer, return it to the pool
         if Arc::strong_count(&buf) == 1 {
             self.pool.put(buf);
         }
-        // else: someone else still holds a reference
+        // Else: someone else still holds a reference
     }
 }
 
@@ -136,12 +149,11 @@ mod tests {
         {
             // get the buffer again
             let buf = pool.get();
-            assert_eq!(buf[0], 1.23);
+            assert_eq!(buf[0], 0f32);
         }
     }
 
     #[test]
-    #[ignore]
     fn test_threaded_buffer_reuse() {
         use std::thread;
 

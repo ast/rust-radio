@@ -1,0 +1,18 @@
+[package]
+name = "filters"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+num-complex = "0.4.6"
+
+[dev-dependencies]
+criterion = "0.6.0"
+
+[[bench]]
+name = "fir"
+harness = false
+
+[[bench]]
+name = "rotate"
+harness = false
