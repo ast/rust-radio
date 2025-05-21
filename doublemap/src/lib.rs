@@ -1,18 +1,24 @@
 use libc::{
-    c_void, close, ftruncate, memfd_create, mmap, munmap, sysconf, MAP_ANON, MAP_FAILED, MAP_FIXED,
-    MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE,
+    MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE,
+    close, ftruncate, memfd_create, mmap, munmap, sysconf,
 };
 use std::ffi::CString;
 use std::io;
 use std::ptr;
+use std::ptr::NonNull;
+
+//use std::marker::PhantomData;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub struct Doublemap {
-    ptr: *mut libc::c_void,
+pub struct Doublemap<T> {
+    // ptr: *mut T,
+    ptr: NonNull<T>,
     len: usize,
     mem_fd: i32,
+    //_phantom: PhantomData<T>,
 }
+
 fn make_memfd_name(size: usize) -> CString {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -26,8 +32,28 @@ fn make_memfd_name(size: usize) -> CString {
     CString::new(name).expect("CString::new failed (null byte in string?)")
 }
 
-impl Doublemap {
+/// Capacity is in number of elements, not bytes We will need to
+/// allocated 2x the requested capacity x size_of(T) rounded up to the
+/// nearest page size.
+impl<T> Doublemap<T> {
     pub fn new(capacity: usize) -> io::Result<Self> {
+        // Size of T
+        let size_of_t = std::mem::size_of::<T>();
+        if size_of_t == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Size of T cannot be zero",
+            ));
+        }
+
+        // Calculate the total capacity in bytes
+        let capacity = capacity.checked_mul(size_of_t).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Capacity overflow when calculating total size",
+            )
+        })?;
+
         // Get system page size
         let page_size = unsafe { sysconf(libc::_SC_PAGESIZE) } as usize;
 
@@ -107,22 +133,21 @@ impl Doublemap {
         }
 
         Ok(Self {
-            ptr: buffer_1,
-            len: aligned_capacity,
+            //ptr: buffer_1 as *mut T,
+            ptr: NonNull::new(buffer_1 as *mut T)
+                .expect("mmap returned null pointer, which should not happen"),
+            len: aligned_capacity / size_of_t,
             mem_fd,
+            //_phantom: PhantomData,
         })
     }
 
-    pub fn as_ptr(&self) -> *mut u8 {
-        self.ptr as *mut u8
+    pub fn as_slice(&self) -> &[T] {
+        unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.len * 2) }
     }
 
-    pub fn as_slice(&self) -> &[u8] {
-        unsafe { std::slice::from_raw_parts(self.as_ptr(), self.len * 2) }
-    }
-
-    pub fn as_mut_slice(&mut self) -> &mut [u8] {
-        unsafe { std::slice::from_raw_parts_mut(self.as_ptr(), self.len * 2) }
+    pub fn as_mut_slice(&mut self) -> &mut [T] {
+        unsafe { std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len * 2) }
     }
 
     pub fn len(&self) -> usize {
@@ -130,10 +155,14 @@ impl Doublemap {
     }
 }
 
-impl Drop for Doublemap {
+impl<T> Drop for Doublemap<T> {
     fn drop(&mut self) {
         unsafe {
-            munmap(self.ptr, self.len * 2);
+            let size_of_t = std::mem::size_of::<T>();
+            munmap(
+                self.ptr.as_ptr() as *mut libc::c_void,
+                self.len * size_of_t * 2,
+            );
             close(self.mem_fd);
         }
     }
@@ -144,20 +173,19 @@ impl Drop for Doublemap {
 mod tests {
     use super::*;
 
+    use num_complex::Complex32;
+
     #[test]
     fn test_doublemap() {
         let capacity = 1024;
-        let doublemap = Doublemap::new(capacity).unwrap();
+        let doublemap = Doublemap::<u8>::new(capacity).unwrap();
         assert_eq!(doublemap.len(), 4096);
-        assert!(!doublemap.as_ptr().is_null());
     }
 
     #[test]
     fn test_slice() {
         let capacity = 4096;
-        let mut doublemap = Doublemap::new(capacity).unwrap();
-
-        assert!(!doublemap.as_ptr().is_null());
+        let mut doublemap = Doublemap::<u8>::new(capacity).unwrap();
 
         let slice = doublemap.as_mut_slice();
         assert_eq!(slice.len(), 8192);
@@ -172,6 +200,45 @@ mod tests {
         // Check that the first and second halves are the same
         for i in 0..len {
             assert_eq!(slice[i], slice[i + len]);
+        }
+    }
+
+    // Test i16
+    #[test]
+    fn test_complex_i16() {
+        let mut map = Doublemap::<i16>::new(1024).unwrap();
+        let slice = map.as_mut_slice();
+
+        // Check len
+        assert_eq!(slice.len(), 4096);
+
+        // Fill the first half with complex numbers
+        for i in 0..slice.len() / 2 {
+            slice[i] = (i as i16) * 2;
+        }
+
+        // Check that the second half is the same as the first half
+        for i in 0..slice.len() / 2 {
+            assert_eq!(slice[i], slice[i + slice.len() / 2]);
+        }
+    }
+
+    #[test]
+    fn test_complex_buffer() {
+        let mut map = Doublemap::<Complex32>::new(2048).unwrap();
+        let slice = map.as_mut_slice();
+
+        // Check len
+        assert_eq!(slice.len(), 4096);
+
+        // Fill the first half with complex numbers
+        for i in 0..slice.len() / 2 {
+            slice[i] = Complex32::new(i as f32, (i + 1) as f32);
+        }
+
+        // Check that the second half is the same as the first half
+        for i in 0..slice.len() / 2 {
+            assert_eq!(slice[i], slice[i + slice.len() / 2]);
         }
     }
 }

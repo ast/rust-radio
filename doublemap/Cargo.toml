@@ -4,4 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+bytemuck = "1.23.0"
 libc = "0.2.172"
+
+[dev-dependencies]
+num-complex = "0.4.6"

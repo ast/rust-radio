@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 num-complex = "0.4.6"
+doublemap = { path = "../doublemap" }
 
 [dev-dependencies]
 criterion = "0.6.0"

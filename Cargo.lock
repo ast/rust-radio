@@ -123,6 +123,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1628fb46dfa0b37568d12e5edd512553eccf6a22a78e8bde00bb4aed84d5bdbf"
 
 [[package]]
+name = "bytemuck"
+version = "1.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9134a6ef01ce4b366b50689c94f82c14bc72bc5d0386829828a2e2752ef7958c"
+
+[[package]]
 name = "cast"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -295,7 +301,9 @@ checksum = "43da5946c66ffcc7745f48db692ffbb10a83bfe0afd96235c5c2a4fb23994929"
 name = "doublemap"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "libc",
+ "num-complex",
 ]
 
 [[package]]
@@ -309,6 +317,7 @@ name = "filters"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "doublemap",
  "num-complex",
 ]
 

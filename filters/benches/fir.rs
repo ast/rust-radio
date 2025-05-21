@@ -1,5 +1,5 @@
-use criterion::{criterion_group, criterion_main, Criterion};
-use filters::{Filter, FirFilter, FirFilter2, FirFilter3};
+use criterion::{Criterion, criterion_group, criterion_main};
+use filters::{Filter, FirFilter, FirFilter3};
 use num_complex::Complex32;
 
 // Black box is used to prevent the compiler from optimizing away the
@@ -34,15 +34,6 @@ fn bench_fir_768ksps(c: &mut Criterion) {
     let input = generate_input(num_samples);
     let coeffs = generate_coefficients(taps);
 
-    // c.bench_function("FirFilter (naive) 768k f32 samples", |b| {
-    //     b.iter(|| {
-    //         let mut fir = FirFilter::new(coeffs.clone());
-    //         for &x in &input {
-    //             black_box(fir.filter(black_box(x)));
-    //         }
-    //     });
-    // });
-
     c.bench_function("FirFilter2 (optimized) 768k f32 samples", |b| {
         b.iter(|| {
             let mut fir = FirFilter3::new(coeffs.clone());
@@ -54,15 +45,6 @@ fn bench_fir_768ksps(c: &mut Criterion) {
 
     // Complex32 input
     let complex_input = generate_complex_input(num_samples);
-
-    // c.bench_function("FirFilter (naive) 768k Complex32 samples", |b| {
-    //     b.iter(|| {
-    //         let mut fir = FirFilter::new(coeffs.clone());
-    //         for &x in &complex_input {
-    //             black_box(fir.filter(black_box(x)));
-    //         }
-    //     });
-    // });
 
     c.bench_function("FirFilter2 (optimized) 768k Complex32 samples", |b| {
         b.iter(|| {

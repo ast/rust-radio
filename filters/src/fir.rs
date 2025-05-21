@@ -1,5 +1,7 @@
 use std::ops::{Add, Mul};
 
+use crate::ringbuffer::RingBuffer;
+
 /// Simple filter trait
 pub trait Filter<T> {
     fn filter(&mut self, input: T) -> T;
@@ -36,6 +38,7 @@ impl<T> DelayLine<T> for BufferLine<T>
 where
     T: Copy + Default,
 {
+    #[inline]
     fn push(&mut self, input: T) {
         self.i += 1;
         self.z[self.i] = input;
@@ -49,6 +52,7 @@ where
         }
     }
 
+    #[inline]
     fn as_slice(&self) -> &[T] {
         &self.z[self.i + 1 - self.taps..=self.i]
     }
@@ -94,70 +98,11 @@ where
     }
 }
 
-/// A higher-performance FIR filter using a large linear buffer
-/// to avoid modulo operations and improve cache locality.
-pub struct FirFilter2<T> {
-    h: Vec<f32>,           // real-valued FIR coefficients
-    z: Vec<T>,             // large delay buffer
-    i: usize,              // current write index
-    tail_threshold: usize, // point at which we reset the buffer
-}
-
-impl<T> FirFilter2<T>
-where
-    T: Copy + Default,
-{
-    pub fn new(h: Vec<f32>) -> Self {
-        let taps = h.len();
-        let buffer_size = 65_536; // ~256KB for Complex32
-        assert!(
-            buffer_size >= 2 * taps,
-            "Delay buffer must be at least twice as long as the number of taps"
-        );
-
-        FirFilter2 {
-            h,
-            z: vec![T::default(); buffer_size],
-            i: taps - 1,
-            tail_threshold: buffer_size - taps,
-        }
-    }
-}
-
-impl<T> crate::Filter<T> for FirFilter2<T>
-where
-    T: Copy + Default + Mul<f32, Output = T> + Add<Output = T>,
-{
-    fn filter(&mut self, x: T) -> T {
-        let n = self.h.len();
-
-        // Write the new sample
-        self.z[self.i] = x;
-        self.i += 1;
-
-        // Compute convolution over contiguous slice
-        let input_slice = &self.z[self.i - n..self.i];
-        let y = self
-            .h
-            .iter()
-            .zip(input_slice.iter())
-            .fold(T::default(), |acc, (&h_j, &z_j)| acc + z_j * h_j);
-
-        // If we're near the end, shift last taps into the start
-        if self.i >= self.tail_threshold {
-            // Copy the last `n - 1` samples into the beginning
-            self.z.copy_within(self.i - (n - 1)..self.i, 0);
-            self.i = n - 1; // next write goes just after the copied region
-        }
-
-        y
-    }
-}
-
 /// FirFilter3
 pub struct FirFilter3<T> {
-    h: Vec<f32>,      // real-valued FIR coefficients
-    z: BufferLine<T>, // delay buffer
+    h: Vec<f32>, // real-valued FIR coefficients
+    //z: BufferLine<T>, // delay buffer
+    z: RingBuffer<T>, // delay buffer
 }
 
 impl<T> FirFilter3<T>
@@ -168,11 +113,13 @@ where
         let taps = h.len();
         FirFilter3 {
             h,
-            z: BufferLine::new(taps),
+            //z: BufferLine::new(taps),
+            z: RingBuffer::new(taps),
         }
     }
 }
 
+#[inline]
 pub fn dot_product<T>(a: &[f32], b: &[T]) -> T
 where
     T: Copy + Default + std::ops::Mul<f32, Output = T> + std::ops::Add<Output = T>,
@@ -211,11 +158,6 @@ mod tests {
             })
             .collect()
     }
-
-    // fn generate_coefficients(n: usize) -> Vec<f32> {
-    //     let norm = 1.0 / n as f32;
-    //     vec![norm; n] // simple moving average filter
-    // }
 
     fn approx_eq_f32(a: f32, b: f32, tol: f32) -> bool {
         (a - b).abs() < tol
@@ -277,7 +219,7 @@ mod tests {
         let input: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
 
         let mut naive = FirFilter::new(taps.clone());
-        let mut optimized = FirFilter2::new(taps);
+        let mut optimized = FirFilter3::new(taps);
 
         let out_naive: Vec<f32> = input.iter().map(|&x| naive.filter(x)).collect();
         let out_optimized: Vec<f32> = input.iter().map(|&x| optimized.filter(x)).collect();
@@ -302,17 +244,15 @@ mod tests {
         let input = generate_complex_input(len, sample_rate, signal_freq);
 
         let mut naive = FirFilter::new(taps.clone());
-        let mut optimized = FirFilter2::new(taps.clone());
         let mut optimized2 = FirFilter3::new(taps);
 
         let out_naive: Vec<_> = input.iter().map(|&x| naive.filter(x)).collect();
-        let out_optimized: Vec<_> = input.iter().map(|&x| optimized.filter(x)).collect();
         let out_optimized2: Vec<_> = input.iter().map(|&x| optimized2.filter(x)).collect();
 
-        assert_eq!(out_naive.len(), out_optimized.len());
+        assert_eq!(out_naive.len(), out_optimized2.len());
         assert_eq!(out_naive.len(), out_optimized2.len());
 
-        for (i, (&a, &b)) in out_naive.iter().zip(out_optimized.iter()).enumerate() {
+        for (i, (&a, &b)) in out_naive.iter().zip(out_optimized2.iter()).enumerate() {
             assert!(
                 approx_eq_complexf32(a, b, 1e-6),
                 "Mismatch at sample {i}: naive = {a}, optimized = {b}"

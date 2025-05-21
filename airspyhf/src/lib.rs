@@ -256,6 +256,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_list_devices() {
         let devices = list_devices();
         let num = devices.expect("Failed to list devices").len();
@@ -264,6 +265,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_open() {
         let mut device = Device::open().expect("Failed to open device");
 
