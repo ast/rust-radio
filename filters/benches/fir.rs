@@ -1,5 +1,8 @@
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{criterion_group, criterion_main, Criterion};
 use filters::{Filter, FirFilter, FirFilter3};
+
+use filters::StackFirFilter;
+
 use num_complex::Complex32;
 
 // Black box is used to prevent the compiler from optimizing away the
@@ -27,7 +30,7 @@ fn generate_coefficients(taps: usize) -> Vec<f32> {
 }
 
 fn bench_fir_768ksps(c: &mut Criterion) {
-    let taps = 64;
+    let taps = 33;
     let num_samples = 768_000;
 
     // f32 input
@@ -49,6 +52,20 @@ fn bench_fir_768ksps(c: &mut Criterion) {
     c.bench_function("FirFilter2 (optimized) 768k Complex32 samples", |b| {
         b.iter(|| {
             let mut fir = FirFilter3::new(coeffs.clone());
+            for &x in &complex_input {
+                black_box(fir.filter(black_box(x)));
+            }
+        });
+    });
+
+    // StackFirFilter
+    c.bench_function("StackFirFilter 768k Complex32 samples", |b| {
+        b.iter(|| {
+            // Convert taps to array
+
+            let array: [f32; 33] = coeffs.clone().try_into().unwrap();
+
+            let mut fir = StackFirFilter::<Complex32, 33, 64>::new(array);
             for &x in &complex_input {
                 black_box(fir.filter(black_box(x)));
             }
