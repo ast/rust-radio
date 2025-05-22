@@ -10,6 +10,8 @@ pub mod ringbuffer;
 pub mod rotate;
 pub mod stack_fir;
 
+pub use decimator::ChainDecimator;
+pub use decimator::ChainableDecimator;
 pub use decimator::Decimator;
 pub use decimator::FirDecimator;
 pub use delay_line::DelayLine;

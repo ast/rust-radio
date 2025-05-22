@@ -1,6 +1,6 @@
 use libc::{
-    close, ftruncate, memfd_create, mmap, munmap, sysconf, MAP_ANON, MAP_FAILED, MAP_FIXED,
-    MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE,
+    MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE,
+    close, ftruncate, memfd_create, mmap, munmap, sysconf,
 };
 use std::ffi::CString;
 use std::io;
@@ -9,6 +9,7 @@ use std::ptr::NonNull;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[derive(Debug)]
 pub struct Doublemap<T> {
     ptr: NonNull<T>,
     // len of one segment, we map 2x len to get mirror

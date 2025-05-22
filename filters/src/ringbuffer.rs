@@ -2,6 +2,7 @@ use crate::DelayLine;
 
 use doublemap::Doublemap;
 
+#[derive(Debug)]
 pub struct RingBuffer<T> {
     z: Doublemap<T>, // delay buffer
     taps: usize,     // length of the delay
