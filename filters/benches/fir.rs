@@ -1,7 +1,8 @@
-use criterion::{criterion_group, criterion_main, Criterion};
-use filters::{Filter, FirFilter, FirFilter3, FirFilter4};
+use criterion::{Criterion, criterion_group, criterion_main};
 
-use filters::StackFirFilter;
+use filters::Decimator;
+use filters::FirDecimator;
+use filters::{Filter, FirFilter3, FirFilter4};
 
 use filters::kernels::HB_35;
 
@@ -67,12 +68,34 @@ fn bench_fir_768ksps(c: &mut Criterion) {
         });
     });
 
-    // StackFirFilter
-    c.bench_function("StackFirFilter 768k Complex32 samples", |b| {
+    // FirDecimator
+    c.bench_function("FirDecimator 768k Complex32 samples", |b| {
         b.iter(|| {
-            let mut fir = StackFirFilter::<Complex32, 35, 64>::new(coeffs);
+            // Convert taps to array
+
+            let mut fir: FirDecimator<Complex32, 35, 2> = FirDecimator::new(coeffs);
+            //let mut fir = FirDecimator::new(coeffs);
             for &x in &complex_input {
-                black_box(fir.filter(black_box(x)));
+                black_box(fir.decimate(black_box(x)));
+            }
+        });
+    });
+
+    // FirDecimator in 3 steps
+    c.bench_function("FirDecimator in 3 steps 768k Complex32 samples", |b| {
+        b.iter(|| {
+            // Convert taps to array
+
+            let mut fir0: FirDecimator<Complex32, 35, 4> = FirDecimator::new(coeffs);
+            let mut fir1: FirDecimator<Complex32, 35, 4> = FirDecimator::new(coeffs);
+            let mut fir2: FirDecimator<Complex32, 35, 2> = FirDecimator::new(coeffs);
+
+            for &x in &complex_input {
+                black_box(
+                    fir0.decimate(black_box(complex_input[0]))
+                        .and_then(|x| fir1.decimate(black_box(x)))
+                        .and_then(|x| fir2.decimate(black_box(x))),
+                );
             }
         });
     });

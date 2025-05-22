@@ -23,28 +23,34 @@ impl<T> RingBuffer<T> {
         }
     }
 
-    // Get the current index
-    #[inline(always)]
-    fn mask(&self, i: usize) -> usize {
-        i & self.imask
+    #[inline]
+    pub fn index(&self) -> usize {
+        self.i
     }
 
     // read index (taps points behind the current index)
-    #[inline(always)]
-    fn read_index(&self) -> usize {
+    #[inline]
+    pub fn start(&self) -> usize {
         self.mask(self.i.wrapping_sub(self.taps))
+    }
+
+    // Get the current index
+    #[inline]
+    fn mask(&self, i: usize) -> usize {
+        i & self.imask
     }
 }
 
 impl<T> DelayLine<T> for RingBuffer<T> {
+    #[inline]
     fn push(&mut self, input: T) {
         let masked = self.mask(self.i);
         self.z.as_mut_slice()[masked] = input;
         self.i = self.i.wrapping_add(1);
     }
-
+    #[inline]
     fn as_slice(&self) -> &[T] {
-        let start = self.read_index();
+        let start = self.start();
         // Double buffering assures that the read index is always valid
         &self.z.as_slice()[start..start + self.taps]
     }

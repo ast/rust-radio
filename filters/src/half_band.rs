@@ -1,8 +1,8 @@
 use std::ops::{Add, Mul};
 
-use crate::ringbuffer::RingBuffer;
 use crate::DelayLine;
 use crate::Filter;
+use crate::ringbuffer::RingBuffer;
 
 /// FirFilter3
 pub struct FirFilter4<T, const N: usize> {
@@ -24,7 +24,7 @@ where
 }
 
 #[inline]
-pub fn dot_product<T>(h: &[f32], z: &[T]) -> T
+pub fn dot_product<T, const N: usize>(h: &[f32; N], z: &[T]) -> T
 where
     T: Copy + Default + std::ops::Mul<f32, Output = T> + std::ops::Add<Output = T>,
 {
@@ -33,7 +33,7 @@ where
         .fold(T::default(), |acc, (&coeff, &sample)| acc + sample * coeff)
 }
 
-// Impl Filter trait for FirFilter3
+// Impl Filter trait for FirFilter4
 impl<T, const N: usize> Filter<T> for FirFilter4<T, N>
 where
     T: Copy + Default + Mul<f32, Output = T> + Add<Output = T>,
@@ -49,8 +49,8 @@ where
 mod tests {
     use super::*;
 
-    use crate::kernels::HB_35;
     use crate::FirFilter;
+    use crate::kernels::HB_35;
 
     use num_complex::Complex32;
     use std::f32::consts::PI;
