@@ -5,18 +5,18 @@ use crate::DelayLine;
 use crate::Filter;
 
 /// FirFilter3
-pub struct FirFilter3<T> {
-    h: Vec<f32>,      // real-valued FIR coefficients
+pub struct FirFilter4<T, const N: usize> {
+    h: [f32; N],      // real-valued FIR coefficients
     z: RingBuffer<T>, // delay buffer
 }
 
-impl<T> FirFilter3<T>
+impl<T, const N: usize> FirFilter4<T, N>
 where
     T: Copy + Default,
 {
-    pub fn new(h: Vec<f32>) -> Self {
+    pub fn new(h: [f32; N]) -> Self {
         let taps = h.len();
-        FirFilter3 {
+        FirFilter4 {
             h,
             z: RingBuffer::new(taps),
         }
@@ -24,17 +24,17 @@ where
 }
 
 #[inline]
-pub fn dot_product<T>(a: &[f32], b: &[T]) -> T
+pub fn dot_product<T>(h: &[f32], z: &[T]) -> T
 where
     T: Copy + Default + std::ops::Mul<f32, Output = T> + std::ops::Add<Output = T>,
 {
-    a.iter()
-        .zip(b.iter())
+    h.iter()
+        .zip(z.iter())
         .fold(T::default(), |acc, (&coeff, &sample)| acc + sample * coeff)
 }
 
 // Impl Filter trait for FirFilter3
-impl<T> Filter<T> for FirFilter3<T>
+impl<T, const N: usize> Filter<T> for FirFilter4<T, N>
 where
     T: Copy + Default + Mul<f32, Output = T> + Add<Output = T>,
 {
@@ -48,6 +48,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::kernels::HB_35;
     use crate::FirFilter;
 
     use num_complex::Complex32;
@@ -64,46 +66,59 @@ mod tests {
             .collect()
     }
 
-    fn approx_eq_f32(a: f32, b: f32, tol: f32) -> bool {
-        (a - b).abs() < tol
-    }
-
     fn approx_eq_complexf32(a: Complex32, b: Complex32, tol: f32) -> bool {
         (a - b).norm() < tol
     }
 
-    #[test]
-    fn test_firfilter3_matches_naive_fir() {
-        let taps = vec![0.25, 0.5, 0.25];
-        let input: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
-
-        let mut naive = FirFilter::new(taps.clone());
-        let mut optimized = FirFilter3::new(taps);
-
-        let out_naive: Vec<f32> = input.iter().map(|&x| naive.filter(x)).collect();
-        let out_optimized: Vec<f32> = input.iter().map(|&x| optimized.filter(x)).collect();
-
-        assert_eq!(out_naive.len(), out_optimized.len());
-
-        for (i, (&a, &b)) in out_naive.iter().zip(out_optimized.iter()).enumerate() {
-            assert!(
-                approx_eq_f32(a, b, 1e-6),
-                "Mismatch at index {i}: naive = {a}, optimized = {b}"
-            );
-        }
+    fn apply_filter(filter: &mut impl Filter<f32>, input: &[f32]) -> Vec<f32> {
+        input.iter().map(|&x| filter.filter(x)).collect()
     }
 
     #[test]
-    fn test_firfilter2_matches_naive_fir_long_signal() {
+    fn test_impulse_identity() {
+        // Impulse response: [1.0] — should just copy the input
+        let h = [1.0];
+
+        let mut filter = FirFilter4::new(h);
+
+        let input = vec![1.0, 2.0, 3.0, 4.0];
+        let expected = input.clone();
+
+        let output = apply_filter(&mut filter, &input);
+        assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn test_simple_moving_average() {
+        // Moving average filter: y[n] = (x[n] + x[n-1]) / 2
+        let h = [0.5, 0.5];
+        let mut filter = FirFilter4::new(h);
+
+        let input = [1.0, 2.0, 3.0, 4.0];
+        let expected = [
+            0.5 * 1.0,             // x[0]
+            0.5 * 2.0 + 0.5 * 1.0, // x[1], x[0]
+            0.5 * 3.0 + 0.5 * 2.0, // x[2], x[1]
+            0.5 * 4.0 + 0.5 * 3.0, // x[3], x[2]
+        ];
+
+        let output = apply_filter(&mut filter, &input);
+        assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn test_firfilter4_matches_naive_fir_long_signal() {
         let sample_rate = 768_000.0;
         let signal_freq = 50_000.0;
-        let taps = vec![0.1, 0.25, 0.5, 0.25, 0.1];
+
+        let taps = HB_35;
+
         let len = 768_000;
 
         let input = generate_complex_input(len, sample_rate, signal_freq);
 
-        let mut naive = FirFilter::new(taps.clone());
-        let mut optimized2 = FirFilter3::new(taps);
+        let mut naive = FirFilter::new(taps.to_vec());
+        let mut optimized2 = FirFilter4::new(taps);
 
         let out_naive: Vec<_> = input.iter().map(|&x| naive.filter(x)).collect();
         let out_optimized2: Vec<_> = input.iter().map(|&x| optimized2.filter(x)).collect();

@@ -1,10 +1,18 @@
+pub mod bufferline;
 pub mod decimator;
+pub mod delay_line;
+pub mod filter;
 pub mod fir;
+pub mod half_band;
+pub mod kernels;
+pub mod naive_fir;
 pub mod ringbuffer;
 pub mod rotate;
 pub mod stack_fir;
 
-pub use fir::Filter;
-pub use fir::FirFilter;
+pub use delay_line::DelayLine;
+pub use filter::Filter;
 pub use fir::FirFilter3;
+pub use half_band::FirFilter4;
+pub use naive_fir::FirFilter;
 pub use stack_fir::StackFirFilter;

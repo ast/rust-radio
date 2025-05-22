@@ -1,7 +1,9 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use filters::{Filter, FirFilter, FirFilter3};
+use filters::{Filter, FirFilter, FirFilter3, FirFilter4};
 
 use filters::StackFirFilter;
+
+use filters::kernels::HB_35;
 
 use num_complex::Complex32;
 
@@ -24,34 +26,41 @@ fn generate_complex_input(len: usize) -> Vec<Complex32> {
         .collect()
 }
 
-fn generate_coefficients(taps: usize) -> Vec<f32> {
-    let norm = 1.0 / taps as f32;
-    vec![norm; taps] // simple moving average
-}
-
 fn bench_fir_768ksps(c: &mut Criterion) {
-    let taps = 33;
     let num_samples = 768_000;
 
     // f32 input
     let input = generate_input(num_samples);
-    let coeffs = generate_coefficients(taps);
+
+    // Complex32 input
+    let complex_input = generate_complex_input(num_samples);
+
+    let coeffs = HB_35;
 
     c.bench_function("FirFilter2 (optimized) 768k f32 samples", |b| {
         b.iter(|| {
-            let mut fir = FirFilter3::new(coeffs.clone());
+            let mut fir = FirFilter3::new(coeffs.to_vec());
             for &x in &input {
                 black_box(fir.filter(black_box(x)));
             }
         });
     });
 
-    // Complex32 input
-    let complex_input = generate_complex_input(num_samples);
-
     c.bench_function("FirFilter2 (optimized) 768k Complex32 samples", |b| {
         b.iter(|| {
-            let mut fir = FirFilter3::new(coeffs.clone());
+            let mut fir = FirFilter3::new(coeffs.to_vec());
+            for &x in &complex_input {
+                black_box(fir.filter(black_box(x)));
+            }
+        });
+    });
+
+    // FirFilter4 (coeffs on stack)
+    c.bench_function("FirFilter4 768k Complex32 samples", |b| {
+        b.iter(|| {
+            // Convert taps to array
+
+            let mut fir = FirFilter4::new(coeffs);
             for &x in &complex_input {
                 black_box(fir.filter(black_box(x)));
             }
@@ -61,11 +70,7 @@ fn bench_fir_768ksps(c: &mut Criterion) {
     // StackFirFilter
     c.bench_function("StackFirFilter 768k Complex32 samples", |b| {
         b.iter(|| {
-            // Convert taps to array
-
-            let array: [f32; 33] = coeffs.clone().try_into().unwrap();
-
-            let mut fir = StackFirFilter::<Complex32, 33, 64>::new(array);
+            let mut fir = StackFirFilter::<Complex32, 35, 64>::new(coeffs);
             for &x in &complex_input {
                 black_box(fir.filter(black_box(x)));
             }

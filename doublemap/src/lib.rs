@@ -1,22 +1,19 @@
 use libc::{
-    MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE,
-    close, ftruncate, memfd_create, mmap, munmap, sysconf,
+    close, ftruncate, memfd_create, mmap, munmap, sysconf, MAP_ANON, MAP_FAILED, MAP_FIXED,
+    MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE,
 };
 use std::ffi::CString;
 use std::io;
 use std::ptr;
 use std::ptr::NonNull;
 
-//use std::marker::PhantomData;
-
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct Doublemap<T> {
-    // ptr: *mut T,
     ptr: NonNull<T>,
+    // len of one segment, we map 2x len to get mirror
     len: usize,
     mem_fd: i32,
-    //_phantom: PhantomData<T>,
 }
 
 fn make_memfd_name(size: usize) -> CString {
@@ -46,7 +43,7 @@ impl<T> Doublemap<T> {
             ));
         }
 
-        // Calculate the total capacity in bytes
+        // Calculate the total capacity needed in bytes
         let capacity = capacity.checked_mul(size_of_t).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -142,10 +139,12 @@ impl<T> Doublemap<T> {
         })
     }
 
+    #[inline(always)]
     pub fn as_slice(&self) -> &[T] {
         unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.len * 2) }
     }
 
+    #[inline(always)]
     pub fn as_mut_slice(&mut self) -> &mut [T] {
         unsafe { std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len * 2) }
     }

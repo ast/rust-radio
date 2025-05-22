@@ -1,39 +1,46 @@
-use crate::fir::DelayLine;
+use crate::DelayLine;
+
 use doublemap::Doublemap;
 
 pub struct RingBuffer<T> {
     z: Doublemap<T>, // delay buffer
     taps: usize,     // length of the delay
     i: usize,        // current write index
+    imask: usize,    // mask for the index
 }
 
 impl<T> RingBuffer<T> {
     pub fn new(taps: usize) -> Self {
+        let doublemap =
+            Doublemap::<T>::new(taps.next_power_of_two()).expect("Failed to create Doublemap");
+        let len = doublemap.len();
+
         RingBuffer {
-            z: Doublemap::new(512).unwrap(),
+            z: doublemap,
             taps,
             i: 0,
+            imask: len - 1,
         }
     }
 
     // Get the current index
     #[inline(always)]
     fn mask(&self, i: usize) -> usize {
-        i & (self.z.len() - 1)
+        i & self.imask
     }
 
     // read index (taps points behind the current index)
     #[inline(always)]
     fn read_index(&self) -> usize {
-        self.mask(self.i.wrapping_add(1).wrapping_sub(self.taps))
+        self.mask(self.i.wrapping_sub(self.taps))
     }
 }
 
 impl<T> DelayLine<T> for RingBuffer<T> {
     fn push(&mut self, input: T) {
-        self.i = self.i.wrapping_add(1);
         let masked = self.mask(self.i);
         self.z.as_mut_slice()[masked] = input;
+        self.i = self.i.wrapping_add(1);
     }
 
     fn as_slice(&self) -> &[T] {
