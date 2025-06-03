@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 
 use signals::ComplexFs4Oscillator;
 use signals::ComplexOscillator;
-use signals::ComplexOscillatorExact;
+use signals::ComplexOscillatorFast;
 
 use std::hint::black_box;
 
@@ -15,7 +15,7 @@ fn bench_oscillator_768ksps(c: &mut Criterion) {
 
     c.bench_function("ComplexOscillator 768k Complex32 samples", |b| {
         b.iter(|| {
-            let mut osc = ComplexOscillator::new(frequency, sample_rate, reset_interval);
+            let mut osc = ComplexOscillatorFast::new(frequency, sample_rate, reset_interval);
             for _ in 0..num_samples {
                 black_box(osc.next());
             }
@@ -24,7 +24,7 @@ fn bench_oscillator_768ksps(c: &mut Criterion) {
 
     c.bench_function("ComplexOscillatorExact 768k Complex32 samples", |b| {
         b.iter(|| {
-            let mut osc = ComplexOscillatorExact::new(frequency, sample_rate);
+            let mut osc = ComplexOscillator::new(frequency, sample_rate);
             for _ in 0..num_samples {
                 black_box(osc.next());
             }
