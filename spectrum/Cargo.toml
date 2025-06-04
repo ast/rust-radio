@@ -4,12 +4,16 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.98"
+bytemuck = "1.23.0"
+clap = { version = "4.5.39", features = ["derive"] }
 num-complex = "0.4.6"
 rustfft = "6.3.0"
+signals = { path = "../signals" }
+zerocopy = { version = "0.8.25", features = ["derive", "std"] }
 
 [dev-dependencies]
 criterion = "0.6.0"
-signals = { path = "../signals" }
 
 [[bench]]
 name = "analyzer"
