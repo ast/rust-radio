@@ -1,11 +1,13 @@
 pub mod complex_fs4_oscillator;
 pub mod complex_oscillator;
 pub mod complex_oscillator_fast;
+pub mod file_source;
 pub mod noise_source;
 
 pub use complex_fs4_oscillator::ComplexFs4Oscillator;
 pub use complex_oscillator::ComplexOscillator;
 pub use complex_oscillator_fast::ComplexOscillatorFast;
+pub use file_source::FileSource;
 pub use noise_source::NoiseSource;
 
 #[cfg(test)]

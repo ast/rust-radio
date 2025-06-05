@@ -1,1 +1,8 @@
 **/target/
+
+# Emacs autosaves
+*~        # filename~  (normal backups)
+\#*#      # #filename# (autosave files)
+.\#*      # .#filename (lock files)
+
+*.bin

@@ -1,6 +1,7 @@
 use airspyhf_sys::*;
 
-use num_complex::Complex;
+use bytemuck::{cast_slice, Pod};
+use num_complex::Complex32;
 use std::ptr::NonNull;
 use thiserror::Error;
 
@@ -48,7 +49,7 @@ pub fn lib_version() -> (u32, u32, u32) {
     )
 }
 
-type SampleCallback = dyn FnMut(&[Complex<f32>], u64) -> i32 + Send + 'static;
+type SampleCallback = dyn FnMut(&[Complex32], u64) -> i32 + Send + 'static;
 
 struct CallbackContext {
     total_samples: usize,
@@ -57,7 +58,7 @@ struct CallbackContext {
 
 pub struct Device {
     // Private device handle
-    handle: NonNull<airspyhf_device_t>, // *mut airspyhf_device_t,
+    handle: NonNull<airspyhf_device_t>,
     // Private context for transfer callback
     context: Option<*mut CallbackContext>,
 }
@@ -70,12 +71,15 @@ extern "C" fn sample_block_callback(transfer: *mut airspyhf_transfer_t) -> i32 {
     let context = unsafe { &mut *context_ptr };
 
     // SAFETY: airspyhf_complex_float_t and Complex<f32> are both #[repr(C)] with identical layout
-    let samples: &[Complex<f32>] = unsafe {
+    let samples: &[Complex32] = unsafe {
         std::slice::from_raw_parts(
-            transfer.samples as *const Complex<f32>,
+            transfer.samples as *const Complex32,
             transfer.sample_count as usize,
         )
     };
+
+    // using cast_slice
+    // TODO: not sure if bytemuck is better?
 
     // Store the number of samples in the context
     context.total_samples += samples.len();
@@ -111,7 +115,7 @@ impl Device {
     }
     pub fn start<F>(&mut self, callback: F) -> Result<(), AirspyHfError>
     where
-        F: FnMut(&[Complex<f32>], u64) -> i32 + Send + 'static,
+        F: FnMut(&[Complex32], u64) -> i32 + Send + 'static,
     {
         let context = Box::new(CallbackContext {
             total_samples: 0,
@@ -128,7 +132,9 @@ impl Device {
                 context_ptr as *mut std::ffi::c_void,
             )
         };
+
         ret.to_result()?;
+
         Ok(())
     }
 

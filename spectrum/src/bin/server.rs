@@ -3,7 +3,8 @@ use clap::{Parser, Subcommand};
 
 use bytemuck::cast_slice;
 use num_complex::Complex32;
-use signals::{ComplexOscillator, NoiseSource};
+
+use signals::{ComplexOscillator, FileSource, NoiseSource};
 use spectrum::Analyzer;
 
 use std::io::BufWriter;
@@ -16,8 +17,8 @@ use std::{
 };
 
 use zerocopy::{
-    FromBytes, Immutable, IntoBytes, KnownLayout, byteorder::big_endian::U16 as U16be,
-    byteorder::big_endian::U32 as U32be, byteorder::big_endian::U64 as U64be,
+    byteorder::big_endian::U16 as U16be, byteorder::big_endian::U32 as U32be,
+    byteorder::big_endian::U64 as U64be, FromBytes, Immutable, IntoBytes, KnownLayout,
 };
 
 /// Message kind
@@ -61,7 +62,9 @@ const SOCKET_PATH: &str = "/tmp/echo.sock";
 #[command(name = "server", version, about = "Unix socket spectrum server test.")]
 struct Cli {
     #[arg(short, long, default_value = SOCKET_PATH)]
-    path: PathBuf,
+    socket_path: PathBuf,
+    #[arg(short, long)]
+    file: Option<PathBuf>,
 }
 
 fn handle_client(mut stream: UnixStream) -> Result<()> {
@@ -76,6 +79,8 @@ fn handle_client(mut stream: UnixStream) -> Result<()> {
     let mut noise = NoiseSource::new(-60.0);
     let mut signal0 = ComplexOscillator::new(50_000.0, 768_000.0);
     let mut signal1 = ComplexOscillator::new(-50_000.0, 768_000.0);
+    // Recorded from airspy
+    let mut signal2 = FileSource::new(PathBuf::from("/home/albin/src/rust-radio/89.3mhz.bin"))?;
 
     let mut input_buffer = vec![Complex32::default(); size];
     let mut output_buffer = vec![0.0f32; size];
@@ -92,7 +97,8 @@ fn handle_client(mut stream: UnixStream) -> Result<()> {
 
         // Add some signal
         for i in 0..size {
-            input_buffer[i] += signal0.next().unwrap() + 0.5 * signal1.next().unwrap();
+            //input_buffer[i] += signal0.next().unwrap() + 0.5 * signal1.next().unwrap();
+            input_buffer[i] += signal2.next().unwrap_or(Complex32::default());
         }
 
         // Process
@@ -114,7 +120,7 @@ fn handle_client(mut stream: UnixStream) -> Result<()> {
 fn main() -> Result<()> {
     let args = Cli::parse();
 
-    let socket_path = args.path;
+    let socket_path = args.socket_path;
 
     // Clean up any pre-existing socket file
     if socket_path.exists() {
