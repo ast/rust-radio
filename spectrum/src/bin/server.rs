@@ -113,7 +113,7 @@ fn handle_client(mut stream: UnixStream) -> Result<()> {
         // flush
         buf_writer.flush()?;
 
-        std::thread::sleep(std::time::Duration::from_millis(1000 / 20));
+        std::thread::sleep(std::time::Duration::from_millis(1000 / 30));
     }
 }
 

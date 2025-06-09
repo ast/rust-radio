@@ -10,7 +10,7 @@ pub struct RingBuffer<T> {
     imask: usize,    // mask for the index
 }
 
-impl<T> RingBuffer<T> {
+impl<T: Copy> RingBuffer<T> {
     pub fn new(taps: usize) -> Self {
         let doublemap =
             Doublemap::<T>::new(taps.next_power_of_two()).expect("Failed to create Doublemap");
@@ -42,7 +42,7 @@ impl<T> RingBuffer<T> {
     }
 }
 
-impl<T> DelayLine<T> for RingBuffer<T> {
+impl<T: Copy> DelayLine<T> for RingBuffer<T> {
     #[inline]
     fn push(&mut self, input: T) {
         let masked = self.mask(self.i);

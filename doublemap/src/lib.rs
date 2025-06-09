@@ -1,6 +1,8 @@
+pub mod ringbuffer;
+
 use libc::{
-    MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE,
-    close, ftruncate, memfd_create, mmap, munmap, sysconf,
+    close, ftruncate, memfd_create, mmap, munmap, sysconf, MAP_ANON, MAP_FAILED, MAP_FIXED,
+    MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE,
 };
 use std::ffi::CString;
 use std::io;
@@ -33,7 +35,12 @@ fn make_memfd_name(size: usize) -> CString {
 /// Capacity is in number of elements, not bytes We will need to
 /// allocated 2x the requested capacity x size_of(T) rounded up to the
 /// nearest page size.
-impl<T> Doublemap<T> {
+impl<T: Copy> Doublemap<T> {
+    pub fn pagesize() -> usize {
+        // Get system page size
+        unsafe { sysconf(libc::_SC_PAGESIZE) as usize }
+    }
+
     pub fn new(capacity: usize) -> io::Result<Self> {
         // Size of T
         let size_of_t = std::mem::size_of::<T>();
@@ -131,7 +138,6 @@ impl<T> Doublemap<T> {
         }
 
         Ok(Self {
-            //ptr: buffer_1 as *mut T,
             ptr: NonNull::new(buffer_1 as *mut T)
                 .expect("mmap returned null pointer, which should not happen"),
             len: aligned_capacity / size_of_t,
