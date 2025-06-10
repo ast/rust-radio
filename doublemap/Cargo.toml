@@ -5,7 +5,15 @@ edition = "2024"
 
 [dependencies]
 bytemuck = "1.23.0"
+crossbeam-utils = "0.8.21"
 libc = "0.2.172"
+parking_lot = "0.12.4"
 
 [dev-dependencies]
 num-complex = "0.4.6"
+criterion = "0.6.0"
+crossbeam = "0.8.4"
+
+[[bench]]
+name = "ring_buffer"
+harness = false

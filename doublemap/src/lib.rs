@@ -1,8 +1,10 @@
+pub mod atomic_ring_buffer;
 pub mod ringbuffer;
+pub mod thread_ring_buffer;
 
 use libc::{
-    close, ftruncate, memfd_create, mmap, munmap, sysconf, MAP_ANON, MAP_FAILED, MAP_FIXED,
-    MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE,
+    MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE,
+    close, ftruncate, memfd_create, mmap, munmap, sysconf,
 };
 use std::ffi::CString;
 use std::io;
@@ -10,6 +12,10 @@ use std::ptr;
 use std::ptr::NonNull;
 
 use std::time::{SystemTime, UNIX_EPOCH};
+
+// SAFETY: Doublemap<T> only uses NonNull internally and is safe to send between threads
+unsafe impl<T: Send> Send for Doublemap<T> {}
+unsafe impl<T: Sync> Sync for Doublemap<T> {}
 
 #[derive(Debug)]
 pub struct Doublemap<T> {
