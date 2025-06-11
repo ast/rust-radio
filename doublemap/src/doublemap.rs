@@ -9,10 +9,6 @@ use std::ptr::NonNull;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-// SAFETY: Doublemap<T> only uses NonNull internally and is safe to send between threads
-unsafe impl<T: Send> Send for Doublemap<T> {}
-unsafe impl<T: Sync> Sync for Doublemap<T> {}
-
 #[derive(Debug)]
 pub struct Doublemap<T> {
     ptr: NonNull<T>,

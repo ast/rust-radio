@@ -2,6 +2,9 @@ use super::Doublemap;
 use parking_lot::{Condvar, Mutex};
 use std::sync::Arc;
 
+unsafe impl<T: Send> Send for RingBuffer<T> {}
+unsafe impl<T: Sync> Sync for RingBuffer<T> {}
+
 // Inner ring buffer
 #[derive(Debug)]
 struct RingBuffer<T> {

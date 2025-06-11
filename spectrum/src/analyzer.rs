@@ -95,7 +95,7 @@ impl Analyzer {
 
             // Check if magnitude squared is non-negative
             //assert!(mag_squared >= 0.0, "Magnitude squared must be non-negative");
-            if (mag_squared < 0.0) {
+            if mag_squared < 0.0 {
                 eprintln!(
                     "Warning: Negative magnitude squared at index {}: {}",
                     i, mag_squared
