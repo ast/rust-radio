@@ -878,6 +878,11 @@ dependencies = [
 [[package]]
 name = "pool"
 version = "0.1.0"
+dependencies = [
+ "criterion",
+ "num-complex",
+ "parking_lot",
+]
 
 [[package]]
 name = "prettyplease"

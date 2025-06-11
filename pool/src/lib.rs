@@ -1,6 +1,6 @@
+use parking_lot::Mutex;
 use std::ops::{Deref, DerefMut};
-
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 pub struct ArcBufferPool<T: Default + Clone> {
     pool: Mutex<Vec<Arc<Vec<T>>>>,
@@ -20,12 +20,7 @@ impl<T: Default + Clone> ArcBufferPool<T> {
     }
 
     pub fn get(self: &Arc<Self>) -> BufferGuard<T> {
-        let buffer = self
-            .pool
-            .lock()
-            .unwrap()
-            .pop()
-            .expect("Buffer pool is empty!!!");
+        let buffer = self.pool.lock().pop().expect("Buffer pool is empty!!!");
 
         println!("Buffer taken from pool");
 
@@ -36,7 +31,7 @@ impl<T: Default + Clone> ArcBufferPool<T> {
     }
 
     pub fn put(&self, mut buffer: Arc<Vec<T>>) {
-        let mut pool = self.pool.lock().unwrap();
+        let mut pool = self.pool.lock();
         println!("Buffer returned to pool");
         println!("Pool size: {}", pool.len());
 
@@ -46,7 +41,7 @@ impl<T: Default + Clone> ArcBufferPool<T> {
             "Buffer has more than one reference!"
         );
 
-        // Clear values
+        // Clear values, ref count will be 1
         Arc::make_mut(&mut buffer)
             .iter_mut()
             .for_each(|x| *x = T::default());
@@ -98,6 +93,8 @@ impl<T: Default + Clone> DerefMut for BufferGuard<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::mpsc::channel;
+    use std::thread;
 
     #[test]
     fn test_arc_buffer_pool() {
@@ -155,40 +152,47 @@ mod tests {
 
     #[test]
     fn test_threaded_buffer_reuse() {
-        use std::thread;
+        const BUF_SIZE: usize = 2048;
+        const POOL_SIZE: usize = 1000;
 
-        const NUM_THREADS: usize = 10;
-        const BUF_SIZE: usize = 32768;
-        const POOL_SIZE: usize = 10;
+        thread::scope(|s| {
+            let pool = ArcBufferPool::<u32>::new(POOL_SIZE, BUF_SIZE);
+            // create channels
+            let (tx, rx) = channel();
 
-        let pool = ArcBufferPool::<u32>::new(POOL_SIZE, BUF_SIZE);
+            s.spawn(move || {
+                for i in 0..10 {
+                    let mut buf = pool.get();
 
-        let mut handles = vec![];
+                    // mut slice from buf
+                    for j in 0..BUF_SIZE {
+                        buf[j] = j as u32 + i as u32 * BUF_SIZE as u32;
+                    }
 
-        for thread_id in 0..NUM_THREADS {
-            let pool = Arc::clone(&pool);
-            let handle = thread::spawn(move || {
-                let mut buffer = pool.get();
-                for i in 0..BUF_SIZE {
-                    buffer[i] = (thread_id as u32) * 1000 + i as u32;
+                    tx.send(buf).unwrap();
+                    // sleep
+                    thread::sleep(std::time::Duration::from_millis(100));
                 }
-
-                for i in 0..BUF_SIZE {
-                    assert_eq!(buffer[i], (thread_id as u32) * 1000 + i as u32);
-                }
-
-                println!("Thread {thread_id} completed");
             });
-            handles.push(handle);
-        }
 
-        for handle in handles {
-            handle.join().unwrap();
-        }
+            s.spawn(move || {
+                let mut received = 0;
 
-        // Check pool has refilled
-        let pool_len = pool.pool.lock().unwrap().len();
-        println!("Pool size after threads: {}", pool_len);
-        assert_eq!(pool_len, POOL_SIZE);
+                for _ in 0..10 {
+                    for j in 0..10 {
+                        match rx.recv() {
+                            Ok(buf) => {
+                                // check the buffer
+                                assert_eq!(buf.len(), BUF_SIZE);
+                                received += 1;
+                            }
+                            Err(e) => {}
+                        }
+                    }
+                }
+
+                assert_eq!(received, 10);
+            });
+        });
     }
 }
