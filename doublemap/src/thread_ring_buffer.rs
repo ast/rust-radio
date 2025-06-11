@@ -1,21 +1,25 @@
 use super::Doublemap;
 use parking_lot::{Condvar, Mutex};
-
 use std::sync::Arc;
 
 // Inner ring buffer
 #[derive(Debug)]
 struct RingBuffer<T> {
     buffer: Doublemap<T>, // delay buffer
+    capacity: usize,      // capacity of the buffer (must be a power of two)
     write: usize,         // write position
     read: usize,          // read position
 }
 
 impl<T: Copy> RingBuffer<T> {
     fn new(capacity: usize) -> Self {
+        let buffer = Doublemap::new(capacity).expect("Failed to create Doublemap");
+        let capacity = buffer.capacity();
+
         RingBuffer {
             // Doublemap will only allow power of two sizes
-            buffer: Doublemap::new(capacity).expect("Failed to create Doublemap"),
+            buffer,
+            capacity,
             write: 0,
             read: 0,
         }
@@ -23,17 +27,22 @@ impl<T: Copy> RingBuffer<T> {
 
     // Mask the index to fit into the buffer size
     fn mask(&self, index: usize) -> usize {
-        index & (self.buffer.len() - 1)
+        index & (self.capacity - 1)
     }
 
-    // how many items are available to read in the buffer?
+    // Available items to read in the buffer
     fn len(&self) -> usize {
         self.write.wrapping_sub(self.read)
     }
 
+    // Available items to write in the buffer
+    fn free(&self) -> usize {
+        self.capacity() - self.len()
+    }
+
+    // Total capacity of the buffer
     fn capacity(&self) -> usize {
-        // TODO: Rename len in double buffer
-        self.buffer.len()
+        self.capacity
     }
 
     fn is_empty(&self) -> bool {
@@ -41,15 +50,11 @@ impl<T: Copy> RingBuffer<T> {
     }
 
     fn is_full(&self) -> bool {
-        self.capacity() == self.len()
-    }
-
-    pub fn available(&self) -> usize {
-        self.capacity() - self.len()
+        self.capacity == self.len()
     }
 
     pub fn produce(&mut self, num: usize) {
-        assert!(num <= self.available());
+        assert!(num <= self.free());
         self.write = self.write.wrapping_add(num);
     }
 
@@ -70,7 +75,7 @@ impl<T: Copy> RingBuffer<T> {
 
     pub fn as_mut_slice(&mut self) -> &mut [T] {
         let start = self.mask(self.write);
-        let end = start + self.available();
+        let end = start + self.free();
         let slice = self.buffer.as_mut_slice();
 
         // The double mapped memory buffer assures that the slice is
@@ -109,7 +114,7 @@ impl<T: Copy> Producer<T> {
         );
 
         // Wait until there is enough space to write
-        while buffer.available() < min_available {
+        while buffer.free() < min_available {
             condvar.wait(&mut buffer);
         }
 
@@ -187,8 +192,6 @@ pub fn ring_buffer_pair<T: Copy>(capacity: usize) -> (Producer<T>, Consumer<T>) 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // use num_complex::Complex32;
 
     #[test]
     fn test_ring_buffer() {

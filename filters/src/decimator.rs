@@ -87,8 +87,8 @@ where
         // Push the new sample into the delay line
 
         self.z.push(x);
-
-        if (self.z.index() & (D - 1)) != 0 {
+        // Check if the write index if we should return a value
+        if (self.z.write() & (D - 1)) != 0 {
             return None;
         }
 

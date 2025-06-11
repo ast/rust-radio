@@ -40,7 +40,7 @@ fn bench_fir_768ksps(c: &mut Criterion) {
 
     let coeffs = HB_35;
 
-    c.bench_function("FirFilter2 (optimized) 768k f32 samples", |b| {
+    c.bench_function("FirFilter3 (optimized) 768k f32 samples", |b| {
         b.iter(|| {
             let mut fir = FirFilter3::new(coeffs.to_vec());
             for &x in &input {
@@ -49,7 +49,7 @@ fn bench_fir_768ksps(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("FirFilter2 (optimized) 768k Complex32 samples", |b| {
+    c.bench_function("FirFilter3 (optimized) 768k Complex32 samples", |b| {
         b.iter(|| {
             let mut fir = FirFilter3::new(coeffs.to_vec());
             for &x in &complex_input {

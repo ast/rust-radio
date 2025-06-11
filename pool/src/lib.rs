@@ -22,8 +22,6 @@ impl<T: Default + Clone> ArcBufferPool<T> {
     pub fn get(self: &Arc<Self>) -> BufferGuard<T> {
         let buffer = self.pool.lock().pop().expect("Buffer pool is empty!!!");
 
-        println!("Buffer taken from pool");
-
         BufferGuard {
             buffer: Some(buffer),
             pool: Arc::clone(self),
@@ -32,8 +30,6 @@ impl<T: Default + Clone> ArcBufferPool<T> {
 
     pub fn put(&self, mut buffer: Arc<Vec<T>>) {
         let mut pool = self.pool.lock();
-        println!("Buffer returned to pool");
-        println!("Pool size: {}", pool.len());
 
         assert_eq!(
             Arc::strong_count(&buffer),
@@ -52,6 +48,8 @@ impl<T: Default + Clone> ArcBufferPool<T> {
 
 #[derive(Clone)]
 pub struct BufferGuard<T: Default + Clone> {
+    // Buffer has to be an Option, so we can take it and leave None in
+    // self and return it to the pool when dropped.
     buffer: Option<Arc<Vec<T>>>,
     pool: Arc<ArcBufferPool<T>>,
 }

@@ -4,56 +4,57 @@ use doublemap::Doublemap;
 
 #[derive(Debug)]
 pub struct RingBuffer<T> {
-    z: Doublemap<T>, // delay buffer
-    taps: usize,     // length of the delay
-    i: usize,        // current write index
-    imask: usize,    // mask for the index
+    buffer: Doublemap<T>, // delay buffer
+    capacity: usize,      // capacity of the buffer (must be a power of two)
+    taps: usize,          // length of the delay
+    write: usize,         // current write index
 }
 
 impl<T: Copy> RingBuffer<T> {
     pub fn new(taps: usize) -> Self {
-        let doublemap =
+        let buffer =
             Doublemap::<T>::new(taps.next_power_of_two()).expect("Failed to create Doublemap");
-        let len = doublemap.len();
+        let capacity = buffer.capacity();
 
         RingBuffer {
-            z: doublemap,
+            buffer,
+            capacity,
             taps,
-            i: 0,
-            imask: len - 1,
+            write: 0,
         }
-    }
-
-    #[inline]
-    pub fn index(&self) -> usize {
-        self.i
-    }
-
-    // read index (taps points behind the current index)
-    #[inline]
-    pub fn start(&self) -> usize {
-        self.mask(self.i.wrapping_sub(self.taps))
     }
 
     // Get the current index
     #[inline]
     fn mask(&self, i: usize) -> usize {
-        i & self.imask
+        i & (self.capacity - 1)
+    }
+
+    #[inline]
+    pub fn write(&self) -> usize {
+        self.write
+    }
+
+    // read index (taps points behind the current index)
+    #[inline]
+    pub fn start(&self) -> usize {
+        self.mask(self.write.wrapping_sub(self.taps))
     }
 }
 
 impl<T: Copy> DelayLine<T> for RingBuffer<T> {
     #[inline]
     fn push(&mut self, input: T) {
-        let masked = self.mask(self.i);
-        self.z.as_mut_slice()[masked] = input;
-        self.i = self.i.wrapping_add(1);
+        let masked = self.mask(self.write);
+        self.buffer.as_mut_slice()[masked] = input;
+        self.write = self.write.wrapping_add(1);
     }
     #[inline]
     fn as_slice(&self) -> &[T] {
-        let start = self.start();
-        // Double buffering assures that the read index is always valid
-        &self.z.as_slice()[start..start + self.taps]
+        let start = self.mask(self.write.wrapping_sub(self.taps));
+        let end = start + self.taps;
+        // Mirrored memory assures that the slice is valid
+        &self.buffer.as_slice()[start..end]
     }
 }
 

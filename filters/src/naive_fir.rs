@@ -2,7 +2,7 @@ use crate::Filter;
 use std::collections::VecDeque;
 use std::ops::{Add, Mul};
 
-/// Naive FIR filter implementation
+/// Naive FIR filter implementation, useful for testing and educational purposes.
 pub struct FirFilter<T> {
     h: Vec<f32>,
     z: VecDeque<T>,
