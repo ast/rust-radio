@@ -65,22 +65,12 @@ impl<T: Copy> RingBuffer<T> {
 
     pub fn as_slice(&self) -> &[T] {
         let start = self.mask(self.read);
-        let end = start + self.len();
-        let slice = self.buffer.as_slice();
-
-        // The double mapped memory buffer assures that the slice is
-        // valid.
-        &slice[start..end]
+        unsafe { std::slice::from_raw_parts(self.buffer.as_ptr().add(start), self.len()) }
     }
 
     pub fn as_mut_slice(&mut self) -> &mut [T] {
         let start = self.mask(self.write);
-        let end = start + self.free();
-        let slice = self.buffer.as_mut_slice();
-
-        // The double mapped memory buffer assures that the slice is
-        // valid.
-        &mut slice[start..end]
+        unsafe { std::slice::from_raw_parts_mut(self.buffer.as_mut_ptr().add(start), self.free()) }
     }
 }
 

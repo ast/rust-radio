@@ -37,13 +37,10 @@ where
         let z = z0.iter().chain(z1.iter());
 
         // Convolve
-        let y = self
-            .h
+        self.h
             .iter()
             .zip(z)
-            .fold(T::default(), |acc, (&coeff, &sample)| acc + sample * coeff);
-
-        y
+            .fold(T::default(), |acc, (&coeff, &sample)| acc + sample * coeff)
     }
 }
 

@@ -1,22 +1,25 @@
 //pub mod bufferline;
+pub mod chain_decimator;
 pub mod decimator;
 pub mod delay_line;
+pub mod fast_fir;
 pub mod filter;
 pub mod fir;
-pub mod half_band;
 pub mod kernels;
 pub mod naive_fir;
 pub mod ringbuffer;
 pub mod rotate;
-pub mod stack_fir;
 
-pub use decimator::ChainDecimator;
-pub use decimator::ChainableDecimator;
+pub mod fir_decimator;
+
+pub use chain_decimator::ChainDecimator;
+pub use chain_decimator::ChainableDecimator;
+
 pub use decimator::Decimator;
-pub use decimator::FirDecimator;
 pub use delay_line::DelayLine;
 pub use filter::Filter;
 pub use fir::FirFilter3;
-pub use half_band::FirFilter4;
+pub use fir_decimator::FirDecimator;
+
+pub use fast_fir::FirFilter4;
 pub use naive_fir::FirFilter;
-pub use stack_fir::StackFirFilter;

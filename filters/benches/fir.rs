@@ -1,6 +1,5 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 
-use filters::ChainDecimator;
 use filters::ChainableDecimator;
 use filters::Decimator;
 use filters::FirDecimator;

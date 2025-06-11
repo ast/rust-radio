@@ -4,7 +4,7 @@ use num_complex::Complex32;
 use std::hint::black_box;
 use std::thread;
 
-const NUM_SAMPLES: usize = 10 * 768_000;
+const NUM_SAMPLES: usize = 4 * 768_000;
 const CHUNK_SIZE: usize = 2048;
 const BUFFER_CAPACITY: usize = CHUNK_SIZE * 8; // 16384
 
@@ -50,5 +50,4 @@ fn bench_threaded_ring_buffer(c: &mut Criterion) {
 }
 
 criterion_group!(benches, bench_threaded_ring_buffer,);
-
 criterion_main!(benches);

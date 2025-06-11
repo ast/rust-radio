@@ -30,11 +30,6 @@ impl<T: Copy> RingBuffer<T> {
         i & (self.capacity - 1)
     }
 
-    #[inline]
-    pub fn write(&self) -> usize {
-        self.write
-    }
-
     // read index (taps points behind the current index)
     #[inline]
     pub fn start(&self) -> usize {
@@ -49,12 +44,12 @@ impl<T: Copy> DelayLine<T> for RingBuffer<T> {
         self.buffer.as_mut_slice()[masked] = input;
         self.write = self.write.wrapping_add(1);
     }
-    #[inline]
+
+    #[inline(always)]
     fn as_slice(&self) -> &[T] {
+        // Find start by looking back `taps` positions from the current write index
         let start = self.mask(self.write.wrapping_sub(self.taps));
-        let end = start + self.taps;
-        // Mirrored memory assures that the slice is valid
-        &self.buffer.as_slice()[start..end]
+        unsafe { std::slice::from_raw_parts(self.buffer.as_ptr().add(start), self.taps) }
     }
 }
 
