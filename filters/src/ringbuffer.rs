@@ -58,6 +58,8 @@ impl<T: Copy> DelayLine<T> for RingBuffer<T> {
 mod tests {
     use super::*;
 
+    use num_complex::Complex32;
+
     #[test]
     fn test_ringbuffer() {
         let taps = 7;
@@ -72,5 +74,24 @@ mod tests {
             }
             assert_eq!(ringbuffer.as_slice(), &[0, 1, 2, 3, 4, 5, 6]);
         }
+    }
+
+    #[test]
+    fn test_ringbuffer_c32() {
+        let taps = 32;
+        let mut ringbuffer = RingBuffer::<Complex32>::new(taps);
+
+        // assert all zero
+        assert_eq!(ringbuffer.as_slice(), &[Complex32::new(0.0, 0.0); 32]);
+
+        for _j in 0..(32768 * 8) {
+            for i in 0..taps {
+                ringbuffer.push(Complex32::new(i as f32, 0.0));
+            }
+        }
+
+        // Check the last 32 values
+        let expected: Vec<Complex32> = (0..taps).map(|i| Complex32::new(i as f32, 0.0)).collect();
+        assert_eq!(ringbuffer.as_slice(), expected.as_slice());
     }
 }
