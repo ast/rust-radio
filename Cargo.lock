@@ -481,6 +481,7 @@ dependencies = [
  "libc",
  "num-complex",
  "parking_lot",
+ "thiserror 2.0.12",
 ]
 
 [[package]]

@@ -58,7 +58,7 @@ impl<T: Copy> Doublemap<T> {
         })?;
 
         // Get system page size
-        let page_size = unsafe { sysconf(libc::_SC_PAGESIZE) } as usize;
+        let page_size = Self::pagesize(); //unsafe { sysconf(libc::_SC_PAGESIZE) } as usize;
 
         // Round up requested capacity to the nearest page size
         let aligned_capacity = capacity.div_ceil(page_size) * page_size;

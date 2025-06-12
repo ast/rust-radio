@@ -2,6 +2,9 @@ use super::Doublemap;
 use parking_lot::{Condvar, Mutex};
 use std::sync::Arc;
 
+pub struct ProduceError;
+pub struct ConsumeError;
+
 unsafe impl<T: Send> Send for RingBuffer<T> {}
 unsafe impl<T: Sync> Sync for RingBuffer<T> {}
 
@@ -12,6 +15,8 @@ struct RingBuffer<T> {
     capacity: usize,      // capacity of the buffer (must be a power of two)
     write: usize,         // write position
     read: usize,          // read position
+    consumer_alive: bool, // consumer alive flag
+    producer_alive: bool, // producer alive flag
 }
 
 impl<T: Copy> RingBuffer<T> {
@@ -25,6 +30,8 @@ impl<T: Copy> RingBuffer<T> {
             capacity,
             write: 0,
             read: 0,
+            consumer_alive: true,
+            producer_alive: true,
         }
     }
 
@@ -61,17 +68,19 @@ impl<T: Copy> RingBuffer<T> {
         self.write = self.write.wrapping_add(num);
     }
 
-    pub fn consume(&mut self, num: usize) {
+    fn consume(&mut self, num: usize) {
         assert!(num <= self.len(), "Cannot consume more than available");
         self.read = self.read.wrapping_add(num);
     }
 
-    pub fn as_slice(&self) -> &[T] {
+    // A slice of the readable part
+    fn as_slice(&self) -> &[T] {
         let start = self.mask(self.read);
         unsafe { std::slice::from_raw_parts(self.buffer.as_ptr().add(start), self.len()) }
     }
 
-    pub fn as_mut_slice(&mut self) -> &mut [T] {
+    // A mut slice of the writable part
+    fn as_mut_slice(&mut self) -> &mut [T] {
         let start = self.mask(self.write);
         unsafe { std::slice::from_raw_parts_mut(self.buffer.as_mut_ptr().add(start), self.free()) }
     }
@@ -93,7 +102,7 @@ impl<T: Copy> Producer<T> {
         buffer.is_full()
     }
 
-    pub fn produce<F>(&self, min_available: usize, f: F)
+    pub fn produce<F>(&self, required: usize, f: F)
     where
         F: FnOnce(&mut [T]) -> usize,
     {
@@ -102,26 +111,32 @@ impl<T: Copy> Producer<T> {
         let mut buffer = buffer.lock();
 
         assert!(
-            min_available <= buffer.capacity(),
+            required <= buffer.capacity(),
             "Requested minimum available items exceeds buffer capacity",
         );
 
-        // Wait until there is enough space to write
-        while buffer.free() < min_available {
-            condvar.wait(&mut buffer);
-        }
+        condvar.wait_while(&mut buffer, |b| b.free() < required);
 
-        // Now this slice will have more or equal to `min_available` items available
-        let write_slice = buffer.as_mut_slice();
-
-        // Closure writes into it and returns how many items were written
-        let produced = f(write_slice);
+        let produced = {
+            let write_slice = buffer.as_mut_slice();
+            f(write_slice)
+        };
 
         // Advance the write pointer
         buffer.produce(produced);
 
         // Notify any waiting consumers
         condvar.notify_one();
+    }
+}
+
+impl<T> Drop for Producer<T> {
+    fn drop(&mut self) {
+        // Set the producer alive flag to false
+        let mut buffer = self.shared.buffer.lock();
+        buffer.producer_alive = false;
+        // Notify any waiting consumers
+        self.shared.condvar.notify_all();
     }
 }
 
@@ -138,7 +153,7 @@ impl<T: Copy> Consumer<T> {
 
     /// Consume data by giving a slice of readable items to the closure.
     /// The closure returns how many items it actually consumed.
-    pub fn consume<F>(&self, min_available: usize, f: F)
+    pub fn consume<F>(&self, required: usize, f: F)
     where
         F: FnOnce(&[T]) -> usize,
     {
@@ -147,23 +162,31 @@ impl<T: Copy> Consumer<T> {
         let mut buffer = buffer.lock();
 
         assert!(
-            min_available <= buffer.capacity(),
+            required <= buffer.capacity(),
             "Requested minimum available items exceeds buffer capacity",
         );
 
-        // Wait until there is at least one item to read
-        while buffer.len() < min_available {
-            condvar.wait(&mut buffer);
-        }
+        condvar.wait_while(&mut buffer, |b| b.len() < required);
 
-        let read_slice = buffer.as_slice(); // Get readable slice
-
-        let consumed = f(read_slice); // Closure consumes items
+        let consumed = {
+            let read_slice = buffer.as_slice();
+            f(read_slice)
+        };
 
         buffer.consume(consumed); // Advance read position
 
         // Notify any waiting producers
         condvar.notify_one();
+    }
+}
+
+impl<T> Drop for Consumer<T> {
+    fn drop(&mut self) {
+        // Set the consumer alive flag to false
+        let mut buffer = self.shared.buffer.lock();
+        buffer.consumer_alive = false;
+        // Notify any waiting producers
+        self.shared.condvar.notify_all();
     }
 }
 
