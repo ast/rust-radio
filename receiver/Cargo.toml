@@ -1,0 +1,13 @@
+[package]
+name = "receiver"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+airspyhf = { path = "../airspyhf" }
+spectrum = { path = "../spectrum" }
+doublemap = { path = "../doublemap" }
+anyhow = "1.0.98"
+clap = { version = "4.5.38", features = ["derive"] }
+num-complex = "0.4.6"
+thiserror = "2.0.12"
