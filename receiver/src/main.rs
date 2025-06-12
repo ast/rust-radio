@@ -5,12 +5,8 @@ use anyhow::{Context, Result};
 
 use doublemap::ring_buffer_pair;
 
-//use doublemap::Consumer;
-//use doublemap::Producer;
-
 use num_complex::Complex32;
-// use std::path::PathBuf;
-//use std::io::{BufWriter, Write};
+use spectrum::Analyzer;
 
 use std::thread;
 
@@ -40,17 +36,29 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // Ring buffer
-    let (producer, consumer) = ring_buffer_pair::<Complex32>(2 * 32768);
+    let (producer, consumer) = ring_buffer_pair::<Complex32>(2048, 32768);
 
     let fft_len = 32768;
+
+    let mut analzyer = Analyzer::new(fft_len, 768_000.0);
+    let mut power_density_spectrum = vec![0.0f32; fft_len];
 
     // Consumer thread
     let consumer_thread = thread::spawn(move || {
         println!("Starting consumer thread with FFT length: {}", fft_len);
 
         loop {
-            consumer.consume(fft_len, |slice| {
-                println!("Got {} samples", slice.len());
+            consumer.consume(|input| {
+                println!("Got {} samples", input.len());
+                // print a sample to check if it works
+
+                analzyer.process(&input, &mut power_density_spectrum);
+                // Print the first 10 samples of the power density spectrum
+                for i in 0..10 {
+                    println!("Sample {}: {}", i, power_density_spectrum[i]);
+                }
+
+                // Return how many samples were consumed
                 fft_len
             });
         }
@@ -76,9 +84,11 @@ fn main() -> Result<()> {
             // Start streaming without recording
             device
                 .start(move |samples, dropped| {
-                    // println!("Received {} samples, dropped {}", samples.len(), dropped);
+                    if dropped > 0 {
+                        eprintln!("Dropped {} samples", dropped);
+                    }
 
-                    producer.produce(samples.len(), |slice| {
+                    producer.produce(|slice| {
                         // Copy samples to slice
                         slice[..samples.len()].copy_from_slice(samples);
                         samples.len()
@@ -88,7 +98,7 @@ fn main() -> Result<()> {
                 .context("Failed to start device")?;
 
             // Sleep for 2 seconds
-            std::thread::sleep(std::time::Duration::from_secs(5));
+            std::thread::sleep(std::time::Duration::from_secs(100));
 
             // Stop streaming
             device.stop().context("Failed to stop device")?;

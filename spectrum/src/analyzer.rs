@@ -3,7 +3,6 @@ use rustfft::{Fft, FftDirection, num_complex::Complex32};
 
 use crate::window;
 
-#[derive(Debug)]
 pub struct Analyzer {
     fft: Radix4<f32>,
     window: Vec<f32>,

@@ -958,6 +958,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "receiver"
+version = "0.1.0"
+dependencies = [
+ "airspyhf",
+ "anyhow",
+ "clap",
+ "doublemap",
+ "num-complex",
+ "spectrum",
+ "thiserror 2.0.12",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
