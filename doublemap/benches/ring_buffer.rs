@@ -6,7 +6,6 @@ use std::thread;
 
 const NUM_SAMPLES: usize = 4 * 768_000;
 const CHUNK_SIZE: usize = 2048;
-const BUFFER_CAPACITY: usize = CHUNK_SIZE * 8; // 16384
 
 fn bench_threaded_ring_buffer(c: &mut Criterion) {
     let input: Vec<Complex32> = (0..NUM_SAMPLES)
@@ -14,7 +13,7 @@ fn bench_threaded_ring_buffer(c: &mut Criterion) {
         .collect();
 
     let (producer, consumer): (Producer<Complex32>, Consumer<Complex32>) =
-        ring_buffer_pair(BUFFER_CAPACITY);
+        ring_buffer_pair(CHUNK_SIZE, CHUNK_SIZE);
 
     c.bench_function("threaded ring buffer Complex32 768k", |b| {
         b.iter(|| {
@@ -23,7 +22,7 @@ fn bench_threaded_ring_buffer(c: &mut Criterion) {
                 let prod = s.spawn(|| {
                     let mut index = 0;
                     while index < input.len() {
-                        producer.produce(CHUNK_SIZE, |buf| {
+                        producer.produce(|buf| {
                             let len = buf.len().min(CHUNK_SIZE).min(input.len() - index);
                             buf[..len].copy_from_slice(&input[index..index + len]);
                             index += len;
@@ -36,7 +35,7 @@ fn bench_threaded_ring_buffer(c: &mut Criterion) {
                 let cons = s.spawn(|| {
                     let mut received = 0;
                     while received < NUM_SAMPLES {
-                        consumer.consume(CHUNK_SIZE, |buf| {
+                        consumer.consume(|buf| {
                             let len = buf.len().min(CHUNK_SIZE).min(NUM_SAMPLES - received);
                             black_box(&buf[..len]); // simulate processing
                             received += len;

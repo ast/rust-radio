@@ -94,6 +94,8 @@ struct Shared<T> {
 // Producer part
 pub struct Producer<T> {
     shared: Arc<Shared<T>>,
+    required: usize,          // How many items the producer requires to proceed
+    consumer_required: usize, // How many items the consumer requires to proceed
 }
 
 impl<T: Copy> Producer<T> {
@@ -102,7 +104,7 @@ impl<T: Copy> Producer<T> {
         buffer.is_full()
     }
 
-    pub fn produce<F>(&self, required: usize, f: F)
+    pub fn produce<F>(&self, f: F)
     where
         F: FnOnce(&mut [T]) -> usize,
     {
@@ -110,12 +112,7 @@ impl<T: Copy> Producer<T> {
         let Shared { buffer, condvar } = &*self.shared;
         let mut buffer = buffer.lock();
 
-        assert!(
-            required <= buffer.capacity(),
-            "Requested minimum available items exceeds buffer capacity",
-        );
-
-        condvar.wait_while(&mut buffer, |b| b.free() < required);
+        condvar.wait_while(&mut buffer, |b| b.free() < self.required);
 
         let produced = {
             let write_slice = buffer.as_mut_slice();
@@ -125,8 +122,10 @@ impl<T: Copy> Producer<T> {
         // Advance the write pointer
         buffer.produce(produced);
 
-        // Notify any waiting consumers
-        condvar.notify_one();
+        if buffer.len() >= self.consumer_required {
+            // If the length is enough for the consumer's requirement, notify
+            condvar.notify_one();
+        }
     }
 }
 
@@ -143,6 +142,8 @@ impl<T> Drop for Producer<T> {
 // Consumer part
 pub struct Consumer<T> {
     shared: Arc<Shared<T>>,
+    required: usize,          // How many items the consumer requires to proceed
+    producer_required: usize, // How many items the producer requires to proceed
 }
 
 impl<T: Copy> Consumer<T> {
@@ -153,7 +154,7 @@ impl<T: Copy> Consumer<T> {
 
     /// Consume data by giving a slice of readable items to the closure.
     /// The closure returns how many items it actually consumed.
-    pub fn consume<F>(&self, required: usize, f: F)
+    pub fn consume<F>(&self, f: F)
     where
         F: FnOnce(&[T]) -> usize,
     {
@@ -161,12 +162,7 @@ impl<T: Copy> Consumer<T> {
         let Shared { buffer, condvar } = &*self.shared;
         let mut buffer = buffer.lock();
 
-        assert!(
-            required <= buffer.capacity(),
-            "Requested minimum available items exceeds buffer capacity",
-        );
-
-        condvar.wait_while(&mut buffer, |b| b.len() < required);
+        condvar.wait_while(&mut buffer, |b| b.len() < self.required);
 
         let consumed = {
             let read_slice = buffer.as_slice();
@@ -176,7 +172,11 @@ impl<T: Copy> Consumer<T> {
         buffer.consume(consumed); // Advance read position
 
         // Notify any waiting producers
-        condvar.notify_one();
+
+        if buffer.free() >= self.producer_required {
+            // If the free space is enough for the producer's requirement, notify
+            condvar.notify_one();
+        }
     }
 }
 
@@ -190,18 +190,32 @@ impl<T> Drop for Consumer<T> {
     }
 }
 
-pub fn ring_buffer_pair<T: Copy>(capacity: usize) -> (Producer<T>, Consumer<T>) {
+pub fn ring_buffer_pair<T: Copy>(
+    producer_required: usize,
+    consumer_required: usize,
+) -> (Producer<T>, Consumer<T>) {
+    // Estimate required capacity by doubling the maximum of producer and consumer requirements
+    // 8 is just a heuristic to ensure we have enough space for both producer and consumer
+    let capacity = 8 * producer_required.max(consumer_required).next_power_of_two();
+
     let shared = Arc::new(Shared {
         buffer: Mutex::new(RingBuffer::new(capacity)),
         condvar: Condvar::new(),
     });
 
-    (
-        Producer {
-            shared: Arc::clone(&shared),
-        },
-        Consumer { shared },
-    )
+    let producer = Producer {
+        shared: Arc::clone(&shared),
+        required: producer_required,
+        consumer_required,
+    };
+
+    let consumer = Consumer {
+        shared,
+        required: consumer_required,
+        producer_required,
+    };
+
+    (producer, consumer)
 }
 
 // Tests
@@ -217,7 +231,7 @@ mod tests {
         let test_rounds = 13489;
         let produce_num = 101;
 
-        let (producer, consumer) = ring_buffer_pair::<u8>(capacity);
+        let (producer, consumer) = ring_buffer_pair::<u8>(101, 101);
 
         // Thread 0
         let producer_thread = std::thread::spawn(move || {
@@ -225,7 +239,7 @@ mod tests {
 
             for _ in 0..test_rounds {
                 // Produce some data
-                producer.produce(produce_num, |slice| {
+                producer.produce(|slice| {
                     // Fill the slice with some data
 
                     for i in 0..slice.len() {
@@ -239,7 +253,7 @@ mod tests {
         // Consumer thread
         let consumer_thread = std::thread::spawn(move || {
             for _ in 0..test_rounds {
-                consumer.consume(produce_num, |slice| {
+                consumer.consume(|slice| {
                     // Consume the slice and check the data
                     for i in 0..slice.len() {
                         assert_eq!(slice[i], (i % 256) as u8);
