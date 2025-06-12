@@ -1,12 +1,12 @@
 use clap::{Parser, Subcommand};
 
 use airspyhf::Device;
-use anyhow::{Context, Result};
-
 use doublemap::ring_buffer_pair;
-
-use num_complex::Complex32;
+use pool::BufferPool;
 use spectrum::Analyzer;
+
+use anyhow::{Context, Result};
+use num_complex::Complex32;
 
 use std::thread;
 
@@ -26,7 +26,7 @@ enum Commands {
         /// Frequency in Hz
         #[arg(short, long, default_value_t = 7_200_000.0)]
         frequency: f64,
-        /// Samplerate
+        /// Sample rate
         #[arg(short, long, default_value_t = 768_000)]
         samplerate: u32,
     },
@@ -40,8 +40,11 @@ fn main() -> Result<()> {
 
     let fft_len = 32768;
 
+    // Create our analyzer
     let mut analzyer = Analyzer::new(fft_len, 768_000.0);
-    let mut power_density_spectrum = vec![0.0f32; fft_len];
+    // Create a buffer pool for the power density spectrum
+    let pool = BufferPool::<f32>::new(10, fft_len);
+    //let mut power_density_spectrum = vec![0.0f32; fft_len];
 
     // Consumer thread
     let consumer_thread = thread::spawn(move || {
@@ -51,6 +54,8 @@ fn main() -> Result<()> {
             consumer.consume(|input| {
                 println!("Got {} samples", input.len());
                 // print a sample to check if it works
+
+                let mut power_density_spectrum = pool.get();
 
                 analzyer.process(&input, &mut power_density_spectrum);
                 // Print the first 10 samples of the power density spectrum

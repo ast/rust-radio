@@ -2,11 +2,11 @@ use parking_lot::Mutex;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-pub struct ArcBufferPool<T: Default + Clone> {
+pub struct BufferPool<T: Default + Clone> {
     pool: Mutex<Vec<Arc<Vec<T>>>>,
 }
 
-impl<T: Default + Clone> ArcBufferPool<T> {
+impl<T: Default + Clone> BufferPool<T> {
     pub fn new(capacity: usize, buffer_len: usize) -> Arc<Self> {
         let mut buffers = Vec::with_capacity(capacity);
 
@@ -51,7 +51,7 @@ pub struct BufferGuard<T: Default + Clone> {
     // Buffer has to be an Option, so we can take it and leave None in
     // self and return it to the pool when dropped.
     buffer: Option<Arc<Vec<T>>>,
-    pool: Arc<ArcBufferPool<T>>,
+    pool: Arc<BufferPool<T>>,
 }
 
 impl<T: Default + Clone> BufferGuard<T> {
@@ -98,7 +98,7 @@ mod tests {
     fn test_arc_buffer_pool() {
         const buf_size: usize = 32768;
 
-        let pool = ArcBufferPool::<f32>::new(10, buf_size);
+        let pool = BufferPool::<f32>::new(10, buf_size);
         {
             let mut buf1 = pool.get();
             assert_eq!(buf1.len(), buf_size);
@@ -126,7 +126,7 @@ mod tests {
 
     #[test]
     fn test_reuse() {
-        let pool = ArcBufferPool::<f32>::new(2, 8);
+        let pool = BufferPool::<f32>::new(2, 8);
         {
             let mut buf = pool.get();
 
@@ -154,7 +154,7 @@ mod tests {
         const POOL_SIZE: usize = 1000;
 
         thread::scope(|s| {
-            let pool = ArcBufferPool::<u32>::new(POOL_SIZE, BUF_SIZE);
+            let pool = BufferPool::<u32>::new(POOL_SIZE, BUF_SIZE);
             // create channels
             let (tx, rx) = channel();
 

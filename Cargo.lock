@@ -966,6 +966,7 @@ dependencies = [
  "clap",
  "doublemap",
  "num-complex",
+ "pool",
  "spectrum",
  "thiserror 2.0.12",
 ]

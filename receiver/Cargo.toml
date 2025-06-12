@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 airspyhf = { path = "../airspyhf" }
+pool = { path = "../pool" }
 spectrum = { path = "../spectrum" }
 doublemap = { path = "../doublemap" }
 anyhow = "1.0.98"

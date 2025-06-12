@@ -1,14 +1,14 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 
 // use num_complex::Complex32;
-use pool::ArcBufferPool;
+use pool::BufferPool;
 use std::hint::black_box;
 use std::sync::mpsc::channel;
 use std::thread;
 
 pub fn threaded_buffer_roundtrip(pool_size: usize, buf_size: usize, num_messages: usize) {
     thread::scope(|s| {
-        let pool = ArcBufferPool::<u32>::new(pool_size, buf_size);
+        let pool = BufferPool::<u32>::new(pool_size, buf_size);
         let (tx, rx) = channel();
 
         // Producer
