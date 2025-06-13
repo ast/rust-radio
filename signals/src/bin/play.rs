@@ -42,6 +42,9 @@ fn main() -> Result<()> {
             move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                 // react to stream events and read or write stream data here.
 
+                // print len of data buffer
+                println!("Data buffer length: {}", data.len());
+
                 for frame in data.chunks_mut(channels) {
                     // Pull the next complex sample
                     let sample = osc.next().unwrap() + noise_source.next().unwrap();

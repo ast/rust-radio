@@ -1,14 +1,9 @@
 use clap::{Parser, Subcommand};
 
 use airspyhf::Device;
-use doublemap::ring_buffer_pair;
-use pool::BufferPool;
-use spectrum::Analyzer;
-
 use anyhow::{Context, Result};
-use num_complex::Complex32;
 
-use std::thread;
+pub mod spectrum_server;
 
 #[derive(Parser)]
 #[command(name = "receiver")]
@@ -24,7 +19,7 @@ struct Cli {
 enum Commands {
     Start {
         /// Frequency in Hz
-        #[arg(short, long, default_value_t = 7_200_000.0)]
+        #[arg(short, long, default_value_t = 89_300_000.0)]
         frequency: f64,
         /// Sample rate
         #[arg(short, long, default_value_t = 768_000)]
@@ -35,39 +30,8 @@ enum Commands {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // Ring buffer
-    let (producer, consumer) = ring_buffer_pair::<Complex32>(2048, 32768);
-
     let fft_len = 32768;
-
-    // Create our analyzer
-    let mut analzyer = Analyzer::new(fft_len, 768_000.0);
-    // Create a buffer pool for the power density spectrum
-    let pool = BufferPool::<f32>::new(10, fft_len);
-    //let mut power_density_spectrum = vec![0.0f32; fft_len];
-
-    // Consumer thread
-    let consumer_thread = thread::spawn(move || {
-        println!("Starting consumer thread with FFT length: {}", fft_len);
-
-        loop {
-            consumer.consume(|input| {
-                println!("Got {} samples", input.len());
-                // print a sample to check if it works
-
-                let mut power_density_spectrum = pool.get();
-
-                analzyer.process(&input, &mut power_density_spectrum);
-                // Print the first 10 samples of the power density spectrum
-                for i in 0..10 {
-                    println!("Sample {}: {}", i, power_density_spectrum[i]);
-                }
-
-                // Return how many samples were consumed
-                fft_len
-            });
-        }
-    });
+    let spectrum_server = spectrum_server::SpectrumServer::new(fft_len);
 
     match &cli.command {
         Commands::Start {
@@ -93,11 +57,9 @@ fn main() -> Result<()> {
                         eprintln!("Dropped {} samples", dropped);
                     }
 
-                    producer.produce(|slice| {
-                        // Copy samples to slice
-                        slice[..samples.len()].copy_from_slice(samples);
-                        samples.len()
-                    });
+                    spectrum_server.process(samples);
+                    // TODO: error handling
+
                     0 // = continue
                 })
                 .context("Failed to start device")?;
@@ -109,8 +71,6 @@ fn main() -> Result<()> {
             device.stop().context("Failed to stop device")?;
         }
     }
-
-    consumer_thread.join().expect("Consumer thread panicked");
 
     Ok(())
 }
