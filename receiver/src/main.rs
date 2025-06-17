@@ -64,8 +64,12 @@ fn main() -> Result<()> {
                 })
                 .context("Failed to start device")?;
 
-            // Sleep for 2 seconds
-            std::thread::sleep(std::time::Duration::from_secs(100));
+            // Wait for user input to stop
+            println!("Press Enter to stop...");
+            let mut input = String::new();
+            std::io::stdin()
+                .read_line(&mut input)
+                .context("Failed to read input")?;
 
             // Stop streaming
             device.stop().context("Failed to stop device")?;
