@@ -1,8 +1,8 @@
 use std::ops::{Add, Mul};
 
-use crate::ringbuffer::RingBuffer;
 use crate::DelayLine;
 use crate::Filter;
+use crate::ringbuffer::RingBuffer;
 
 /// FirFilter3
 pub struct FirFilter3<T> {
@@ -49,20 +49,8 @@ where
 mod tests {
     use super::*;
     use crate::FirFilter;
-
     use num_complex::Complex32;
-    use std::f32::consts::PI;
-
-    fn generate_complex_input(len: usize, sample_rate: f32, freq_hz: f32) -> Vec<Complex32> {
-        let omega = 2.0 * PI * freq_hz / sample_rate;
-        (0..len)
-            .map(|i| {
-                let phase = omega * i as f32;
-                let (im, re) = phase.sin_cos();
-                Complex32::new(re, im)
-            })
-            .collect()
-    }
+    use signals::ComplexOscillator;
 
     fn approx_eq_f32(a: f32, b: f32, tol: f32) -> bool {
         (a - b).abs() < tol
@@ -100,7 +88,8 @@ mod tests {
         let taps = vec![0.1, 0.25, 0.5, 0.25, 0.1];
         let len = 768_000;
 
-        let input = generate_complex_input(len, sample_rate, signal_freq);
+        let osc = ComplexOscillator::new(signal_freq, sample_rate);
+        let input = osc.take(len).collect::<Vec<_>>();
 
         let mut naive = FirFilter::new(taps.clone());
         let mut optimized2 = FirFilter3::new(taps);

@@ -64,20 +64,9 @@ mod tests {
 
     use crate::kernels::HB_35;
     use num_complex::Complex32;
-    use std::f32::consts::PI;
+    use signals::ComplexOscillator;
 
     use crate::chain_decimator::ChainableDecimator;
-
-    fn generate_complex_input(len: usize, sample_rate: f32, freq_hz: f32) -> Vec<Complex32> {
-        let omega = 2.0 * PI * freq_hz / sample_rate;
-        (0..len)
-            .map(|i| {
-                let phase = omega * i as f32;
-                let (im, re) = phase.sin_cos();
-                Complex32::new(re, im)
-            })
-            .collect()
-    }
 
     #[test]
     fn test_fir_decimator() {
@@ -85,7 +74,8 @@ mod tests {
         let signal_freq = 50_000.0;
         let len = 768_000;
 
-        let input = generate_complex_input(len, sample_rate, signal_freq);
+        let osc = ComplexOscillator::new(signal_freq, sample_rate);
+        let input: Vec<Complex32> = osc.take(len).collect();
 
         let fir0: FirDecimator<Complex32, 35, 4> = FirDecimator::new(HB_35);
         let fir1: FirDecimator<Complex32, 35, 4> = FirDecimator::new(HB_35);

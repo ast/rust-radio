@@ -473,14 +473,11 @@ checksum = "0c87e182de0887fd5361989c677c4e8f5000cd9491d6d563161a8f3a5519fc7f"
 name = "doublemap"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
  "criterion",
  "crossbeam",
- "crossbeam-utils",
  "libc",
  "num-complex",
  "parking_lot",
- "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -508,6 +505,7 @@ dependencies = [
  "criterion",
  "doublemap",
  "num-complex",
+ "signals",
 ]
 
 [[package]]
@@ -970,7 +968,6 @@ dependencies = [
  "num-complex",
  "pool",
  "spectrum",
- "thiserror 2.0.12",
  "zerocopy",
 ]
 
@@ -1109,8 +1106,6 @@ name = "signals"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bytemuck",
- "clap",
  "cpal",
  "criterion",
  "fastrand",

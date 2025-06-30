@@ -9,6 +9,7 @@ doublemap = { path = "../doublemap" }
 
 [dev-dependencies]
 criterion = "0.6.0"
+signals = { path = "../signals" }
 
 [[bench]]
 name = "fir"

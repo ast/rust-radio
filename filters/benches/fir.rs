@@ -3,9 +3,9 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use filters::ChainableDecimator;
 use filters::Decimator;
 use filters::FirDecimator;
-use filters::{Filter, FirFilter3, FirFilter4};
-
 use filters::kernels::HB_35;
+use filters::{Filter, FirFilter3, FirFilter4};
+use signals::ComplexOscillator;
 
 use num_complex::Complex32;
 
@@ -13,29 +13,13 @@ use num_complex::Complex32;
 // filter calls
 use std::hint::black_box;
 
-fn generate_input(len: usize) -> Vec<f32> {
-    (0..len).map(|i| (i as f32).sin()).collect()
-}
-
-fn generate_complex_input(len: usize) -> Vec<Complex32> {
-    (0..len)
-        .map(|i| {
-            let t = i as f32;
-
-            let (im, re) = t.sin_cos();
-            Complex32::new(re, im)
-        })
-        .collect()
-}
-
 fn bench_fir_768ksps(c: &mut Criterion) {
     let num_samples = 768_000;
 
-    // f32 input
-    let input = generate_input(num_samples);
+    let osc = ComplexOscillator::new(50_000.0, 768_000.0);
 
-    // Complex32 input
-    let complex_input = generate_complex_input(num_samples);
+    let complex_input = osc.take(num_samples).collect::<Vec<_>>();
+    let input = complex_input.iter().map(|c| c.re).collect::<Vec<f32>>();
 
     let coeffs = HB_35;
 

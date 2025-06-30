@@ -1,3 +1,6 @@
+// Filters are design with this tool
+// https://pypi.org/project/pyfda/
+
 // Order 34 (35 taps) FIR half-band filter.
 pub const HB_35: [f32; 35] = [
     0.0011523146658012954,

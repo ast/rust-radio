@@ -46,35 +46,27 @@ impl ComplexRotator {
 mod tests {
     use super::*;
     use num_complex::Complex32;
+    use signals::ComplexOscillator;
 
     fn approx_eq(a: Complex32, b: Complex32, tol: f32) -> bool {
         (a - b).norm() < tol
-    }
-
-    fn generate_complex_input(len: usize, sample_rate: f32, freq_hz: f32) -> Vec<Complex32> {
-        let omega = 2.0 * PI * freq_hz / sample_rate;
-
-        (0..len)
-            .map(|i| {
-                let phase = omega * i as f32;
-                let (im, re) = phase.sin_cos();
-                Complex32::new(re, im) // cos + j·sin = e^(j·phase)
-            })
-            .collect()
     }
 
     #[test]
     fn test_rotator_shifts_frequency_correctly() {
         let len = 768_000;
         let sample_rate = 768_000.0;
-        let f1 = 1_000.0;
-        let f2 = -5_000.0;
-        let delta_f = f2 - f1;
+        let freq_0 = 1_000.0;
+        let freq_1 = -5_000.0;
+        let delta_f = freq_1 - freq_0;
 
-        // Original signal at f1
-        let input = generate_complex_input(len, sample_rate, f1);
-        // Expected signal at f2
-        let expected = generate_complex_input(len, sample_rate, f2);
+        // Input signal
+        let osc0 = ComplexOscillator::new(freq_0, sample_rate);
+        let input = osc0.take(len).collect::<Vec<_>>();
+
+        // Expected output signal after frequency shift
+        let osc1 = ComplexOscillator::new(freq_1, sample_rate);
+        let expected: Vec<Complex32> = osc1.take(len).collect();
 
         // Rotator to shift f1 → f2
         let mut rot = ComplexRotator::new(delta_f, sample_rate, 512);
@@ -85,9 +77,9 @@ mod tests {
             let ratio = r / e;
             let phase_error = ratio.arg(); // should be ≈ 0 if r ≈ e (modulo amplitude)
             assert!(
-            phase_error.abs() < 5e-3,
-            "Phase error too large at sample {i}: rotated = {r}, expected = {e}, phase_error = {phase_error}"
-        );
+                phase_error.abs() < 5e-3,
+                "Phase error too large at sample {i}: rotated = {r}, expected = {e}, phase_error = {phase_error}"
+            );
         }
     }
 
