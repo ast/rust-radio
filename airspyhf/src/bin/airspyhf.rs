@@ -3,7 +3,6 @@ use clap::{Parser, Subcommand};
 use airspyhf::Device;
 
 use anyhow::{Context, Result};
-use bytemuck::{cast_slice, Pod};
 use num_complex::Complex32;
 use std::path::PathBuf;
 

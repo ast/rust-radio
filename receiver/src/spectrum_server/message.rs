@@ -1,6 +1,6 @@
 use zerocopy::{
-    FromBytes, Immutable, IntoBytes, KnownLayout, byteorder::big_endian::U16 as U16be,
-    byteorder::big_endian::U32 as U32be, byteorder::big_endian::U64 as U64be,
+    Immutable, IntoBytes, byteorder::big_endian::U16 as U16be, byteorder::big_endian::U32 as U32be,
+    byteorder::big_endian::U64 as U64be,
 };
 
 /// Message kind

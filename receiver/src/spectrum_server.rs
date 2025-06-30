@@ -1,10 +1,8 @@
 pub mod message;
 
-use bytemuck::cast_slice;
 use crossbeam::channel::Receiver;
-use crossbeam::channel::Sender;
 use crossbeam::channel::bounded;
-use doublemap::{Consumer, Producer, ring_buffer_pair};
+use doublemap::{Producer, ring_buffer_pair};
 use num_complex::Complex32;
 use pool::BufferGuard;
 use pool::BufferPool;

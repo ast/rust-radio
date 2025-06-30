@@ -1,8 +1,7 @@
 use anyhow::{Context, Result};
-use num_complex::Complex32;
 
+use cpal::SampleFormat;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{Sample, SampleFormat, StreamConfig};
 
 use signals::ComplexOscillator;
 use signals::NoiseSource;

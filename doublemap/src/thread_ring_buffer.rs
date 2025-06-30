@@ -225,11 +225,7 @@ mod tests {
 
     #[test]
     fn test_ring_buffer() {
-        // placeholder
-        let capacity = 1024;
-
         let test_rounds = 13489;
-        let produce_num = 101;
 
         let (producer, consumer) = ring_buffer_pair::<u8>(101, 101);
 
@@ -255,9 +251,9 @@ mod tests {
             for _ in 0..test_rounds {
                 consumer.consume(|slice| {
                     // Consume the slice and check the data
-                    for i in 0..slice.len() {
+                    (0..slice.len()).for_each(|i| {
                         assert_eq!(slice[i], (i % 256) as u8);
-                    }
+                    });
                     slice.len() // return how many items were consumed
                 });
             }

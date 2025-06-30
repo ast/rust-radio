@@ -1,6 +1,5 @@
 use airspyhf_sys::*;
 
-use bytemuck::{cast_slice, Pod};
 use num_complex::Complex32;
 use std::ptr::NonNull;
 use thiserror::Error;
@@ -78,9 +77,6 @@ extern "C" fn sample_block_callback(transfer: *mut airspyhf_transfer_t) -> i32 {
         )
     };
 
-    // using cast_slice
-    // TODO: not sure if bytemuck is better?
-
     // Store the number of samples in the context
     context.total_samples += samples.len();
 
@@ -108,7 +104,6 @@ impl Device {
     }
 
     pub fn output_size(&self) -> Result<i32, AirspyHfError> {
-        let mut size: i32 = 0;
         let ret = unsafe { airspyhf_get_output_size(self.handle.as_ptr()) };
         let size = ret.to_result()?;
         Ok(size)
@@ -297,8 +292,8 @@ mod tests {
         // Run device for a while
         device
             .start(|samples, dropped| {
-                // println!("Received {} samples, dropped {}", samples.len(), dropped);
-                // 0 = continue
+                assert!(samples.len() == 2048, "No samples received");
+                assert!(dropped == 0, "Dropped samples should be 0");
                 0
             })
             .expect("Failed to start device");

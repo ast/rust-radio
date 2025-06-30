@@ -17,7 +17,6 @@ version = "0.1.0"
 dependencies = [
  "airspyhf-sys",
  "anyhow",
- "bytemuck",
  "clap",
  "num-complex",
  "thiserror 2.0.12",
@@ -881,6 +880,7 @@ name = "pool"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "crossbeam",
  "num-complex",
  "parking_lot",
 ]

@@ -68,7 +68,7 @@ mod tests {
         // should have 7 taps zeros
         assert_eq!(ringbuffer.as_slice(), &[0, 0, 0, 0, 0, 0, 0]);
 
-        for j in 0..(32768 * 8) {
+        for _j in 0..(32768 * 8) {
             for i in 0..taps {
                 ringbuffer.push(i as u8);
             }

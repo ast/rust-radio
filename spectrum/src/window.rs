@@ -1,21 +1,21 @@
 /// Hamming window
 use std::f32::consts::PI;
 
-pub fn hamming(n: usize, N: usize) -> f32 {
-    0.54 - 0.46 * (2.0 * PI * n as f32 / (N - 1) as f32).cos()
+pub fn hamming(n: usize, len: usize) -> f32 {
+    0.54 - 0.46 * (2.0 * PI * n as f32 / (len - 1) as f32).cos()
 }
 
-pub fn hamming_window(N: usize) -> Vec<f32> {
-    (0..N).map(|n| hamming(n, N)).collect()
+pub fn hamming_window(len: usize) -> Vec<f32> {
+    (0..len).map(|n| hamming(n, len)).collect()
 }
 
-pub fn hann(n: usize, N: usize) -> f32 {
-    0.5 * (1.0 - (2.0 * PI * n as f32 / (N - 1) as f32).cos())
+pub fn hann(n: usize, len: usize) -> f32 {
+    0.5 * (1.0 - (2.0 * PI * n as f32 / (len - 1) as f32).cos())
 }
 
 /// Hanning window
-pub fn hann_window(N: usize) -> Vec<f32> {
-    (0..N).map(|n| hann(n, N)).collect()
+pub fn hann_window(len: usize) -> Vec<f32> {
+    (0..len).map(|n| hann(n, len)).collect()
 }
 
 // Tests

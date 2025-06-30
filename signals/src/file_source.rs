@@ -1,10 +1,8 @@
 use num_complex::Complex32;
 use std::path::PathBuf;
 
-use bytemuck;
-
 use std::io::Read;
-use std::io::{self, Seek, SeekFrom};
+use std::io::{self, Seek};
 
 use std::io::BufReader;
 

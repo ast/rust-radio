@@ -1,24 +1,24 @@
-use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use anyhow::Result;
+use clap::Parser;
 
 use bytemuck::cast_slice;
 use num_complex::Complex32;
 
-use signals::{ComplexOscillator, FileSource, NoiseSource};
+use signals::{FileSource, NoiseSource};
 use spectrum::Analyzer;
 
 use std::io::BufWriter;
 
 use std::{
     fs,
-    io::{Read, Write},
+    io::Write,
     os::unix::net::{UnixListener, UnixStream},
     path::PathBuf,
 };
 
 use zerocopy::{
-    byteorder::big_endian::U16 as U16be, byteorder::big_endian::U32 as U32be,
-    byteorder::big_endian::U64 as U64be, FromBytes, Immutable, IntoBytes, KnownLayout,
+    Immutable, IntoBytes, byteorder::big_endian::U16 as U16be, byteorder::big_endian::U32 as U32be,
+    byteorder::big_endian::U64 as U64be,
 };
 
 /// Message kind
@@ -67,7 +67,7 @@ struct Cli {
     file: Option<PathBuf>,
 }
 
-fn handle_client(mut stream: UnixStream) -> Result<()> {
+fn handle_client(stream: UnixStream) -> Result<()> {
     // Size of FFT
     let size = 32768;
     // Create our analyzer
@@ -77,17 +77,12 @@ fn handle_client(mut stream: UnixStream) -> Result<()> {
 
     // Noise generator
     let mut noise = NoiseSource::new(-60.0);
-    let mut signal0 = ComplexOscillator::new(50_000.0, 768_000.0);
-    let mut signal1 = ComplexOscillator::new(-50_000.0, 768_000.0);
+    // let mut signal0 = ComplexOscillator::new(50_000.0, 768_000.0);
+    // let mut signal1 = ComplexOscillator::new(-50_000.0, 768_000.0);
     // Recorded from airspy
     let mut signal2 = FileSource::new(PathBuf::from("/home/albin/src/rust-radio/89.3mhz.bin"))?;
 
     let mut input_buffer = vec![Complex32::default(); size];
-    let mut output_buffer = vec![0.0f32; size];
-
-    // Process
-
-    // Create a buffered writer
     let mut output_buffer = vec![0.0f32; size];
 
     loop {

@@ -23,7 +23,7 @@ impl Iterator for NoiseSource {
     type Item = Complex32;
 
     fn next(&mut self) -> Option<Self::Item> {
-        /// Box-Muller transform
+        // Box-Muller transform
         let u1 = fastrand::f32(); // uniform in (0, 1)
         let u2 = fastrand::f32();
         let r = (-2.0 * u1.ln()).sqrt();
