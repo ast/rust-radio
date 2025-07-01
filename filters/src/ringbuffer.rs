@@ -2,6 +2,9 @@ use crate::DelayLine;
 
 use doublemap::Doublemap;
 
+unsafe impl<T: Send> Send for RingBuffer<T> {}
+unsafe impl<T: Sync> Sync for RingBuffer<T> {}
+
 #[derive(Debug)]
 pub struct RingBuffer<T> {
     buffer: Doublemap<T>, // delay buffer

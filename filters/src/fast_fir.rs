@@ -4,7 +4,7 @@ use crate::DelayLine;
 use crate::Filter;
 use crate::ringbuffer::RingBuffer;
 
-/// FirFilter3
+/// FirFilter4
 pub struct FirFilter4<T, const N: usize> {
     h: [f32; N],      // real-valued FIR coefficients
     z: RingBuffer<T>, // delay buffer
@@ -24,7 +24,7 @@ where
 }
 
 #[inline]
-pub fn dot_product<T, const N: usize>(h: &[f32; N], z: &[T]) -> T
+fn dot_product<T, const N: usize>(h: &[f32; N], z: &[T]) -> T
 where
     T: Copy + Default + std::ops::Mul<f32, Output = T> + std::ops::Add<Output = T>,
 {

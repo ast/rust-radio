@@ -28,7 +28,7 @@ where
 }
 
 #[inline]
-pub fn dot_product<T>(a: &[f32], b: &[T]) -> T
+fn dot_product<T>(a: &[f32], b: &[T]) -> T
 where
     T: Copy + Default + std::ops::Mul<f32, Output = T> + std::ops::Add<Output = T>,
 {
@@ -56,6 +56,28 @@ where
         Some(dot_product(&self.h, self.z.as_slice()))
     }
 }
+
+// pub struct FirDecimatorIter<'a, T, I, const N: usize, const D: usize> {
+//     decimator: &'a mut FirDecimator<T, N, D>,
+//     input: I,
+// }
+
+// impl<'a, T, I, const N: usize, const D: usize> Iterator for FirDecimatorIter<'a, T, I, N, D>
+// where
+//     T: Copy,
+//     I: Iterator<Item = T>,
+// {
+//     type Item = f32;
+
+//     fn next(&mut self) -> Option<Self::Item> {
+//         while let Some(sample) = self.input.next() {
+//             if let Some(y) = self.decimator.decimate(sample) {
+//                 return Some(y);
+//             }
+//         }
+//         None
+//     }
+// }
 
 // Tests
 #[cfg(test)]
