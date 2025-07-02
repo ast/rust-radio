@@ -238,9 +238,10 @@ mod tests {
                 producer.produce(|slice| {
                     // Fill the slice with some data
 
-                    for i in 0..slice.len() {
+                    (0..slice.len()).for_each(|i| {
                         slice[i] = (i % 256) as u8;
-                    }
+                    });
+
                     slice.len() // return how many items were produced
                 });
             }

@@ -3,11 +3,22 @@ use libc::{
     close, ftruncate, memfd_create, mmap, munmap, sysconf,
 };
 use std::ffi::CString;
-use std::io;
 use std::ptr;
 use std::ptr::NonNull;
 
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum DoublemapeError {
+    #[error("Size of T cannot be zero")]
+    ZeroSizedType,
+    #[error("Overflow")]
+    Overflow,
+    #[error("memfd: {0}")]
+    IO(#[from] std::io::Error),
+}
 
 #[derive(Debug)]
 pub struct Doublemap<T> {
@@ -17,6 +28,7 @@ pub struct Doublemap<T> {
     mem_fd: i32,
 }
 
+// Helper function to create a unique memfd name
 fn make_memfd_name(size: usize) -> CString {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -30,35 +42,30 @@ fn make_memfd_name(size: usize) -> CString {
     CString::new(name).expect("CString::new failed (null byte in string?)")
 }
 
+// Helper function to get the system page size
+fn pagesize() -> usize {
+    // Get system page size
+    unsafe { sysconf(libc::_SC_PAGESIZE) as usize }
+}
+
 /// Capacity is in number of elements, not bytes We will need to
 /// allocated 2x the requested capacity x size_of(T) rounded up to the
 /// nearest page size.
 impl<T: Copy> Doublemap<T> {
-    pub fn pagesize() -> usize {
-        // Get system page size
-        unsafe { sysconf(libc::_SC_PAGESIZE) as usize }
-    }
-
-    pub fn new(capacity: usize) -> io::Result<Self> {
+    pub fn new(capacity: usize) -> Result<Self, DoublemapeError> {
         // Size of T
         let size_of_t = std::mem::size_of::<T>();
         if size_of_t == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Size of T cannot be zero",
-            ));
+            return Err(DoublemapeError::ZeroSizedType);
         }
 
         // Calculate the total capacity needed in bytes
-        let capacity = capacity.checked_mul(size_of_t).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Capacity overflow when calculating total size",
-            )
-        })?;
+        let capacity = capacity
+            .checked_mul(size_of_t)
+            .ok_or(DoublemapeError::Overflow)?;
 
         // Get system page size
-        let page_size = Self::pagesize(); //unsafe { sysconf(libc::_SC_PAGESIZE) } as usize;
+        let page_size = pagesize();
 
         // Round up requested capacity to the nearest page size
         let aligned_capacity = capacity.div_ceil(page_size) * page_size;
@@ -68,13 +75,13 @@ impl<T: Copy> Doublemap<T> {
         // Create a memfd
         let mem_fd = unsafe { memfd_create(name.as_ptr(), 0) };
         if mem_fd < 0 {
-            return Err(io::Error::last_os_error());
+            return Err(DoublemapeError::IO(std::io::Error::last_os_error()));
         }
 
-        // Resize it
+        // Resize it it to the aligned_capacity
         if unsafe { ftruncate(mem_fd, aligned_capacity as i64) } != 0 {
             unsafe { close(mem_fd) };
-            return Err(io::Error::last_os_error());
+            return Err(DoublemapeError::IO(std::io::Error::last_os_error()));
         }
 
         // Reserve 2x space with PROT_NONE
@@ -89,9 +96,10 @@ impl<T: Copy> Doublemap<T> {
                 0,
             )
         };
+
         if reserved == MAP_FAILED {
             unsafe { close(mem_fd) };
-            return Err(io::Error::last_os_error());
+            return Err(DoublemapeError::IO(std::io::Error::last_os_error()));
         }
 
         // First mapping
@@ -111,7 +119,7 @@ impl<T: Copy> Doublemap<T> {
                 munmap(reserved, total_size);
                 close(mem_fd);
             }
-            return Err(io::Error::last_os_error());
+            return Err(DoublemapeError::IO(std::io::Error::last_os_error()));
         }
 
         // Second mapping (mirror)
@@ -132,7 +140,8 @@ impl<T: Copy> Doublemap<T> {
                 munmap(reserved, total_size);
                 close(mem_fd);
             }
-            return Err(io::Error::last_os_error());
+
+            return Err(DoublemapeError::IO(std::io::Error::last_os_error()));
         }
 
         Ok(Self {
@@ -140,7 +149,6 @@ impl<T: Copy> Doublemap<T> {
                 .expect("mmap returned null pointer, which should not happen"),
             capacity: aligned_capacity / size_of_t,
             mem_fd,
-            //_phantom: PhantomData,
         })
     }
 
