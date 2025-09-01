@@ -1,0 +1,3 @@
+* SDR in rust
+
+Copyright 2025 Albin Stigö SM6WJM/AD8KM

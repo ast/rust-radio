@@ -16,6 +16,7 @@ impl<T: Copy> RingBuffer<T> {
     pub fn new(taps: usize) -> Self {
         let buffer =
             Doublemap::<T>::new(taps.next_power_of_two()).expect("Failed to create Doublemap");
+
         let capacity = buffer.capacity();
 
         RingBuffer {
@@ -43,8 +44,15 @@ impl<T: Copy> DelayLine<T> for RingBuffer<T> {
     #[inline]
     fn push(&mut self, input: T) {
         let masked = self.mask(self.write);
-        self.buffer.as_mut_slice()[masked] = input;
+
+        // No range check needed here, as we know the mask is always within bounds
+        unsafe {
+            let ptr = self.buffer.as_mut_ptr().add(masked);
+            *ptr = input;
+        }
         self.write = self.write.wrapping_add(1);
+
+        // self.buffer.as_mut_slice()[masked] = input;
     }
 
     #[inline(always)]

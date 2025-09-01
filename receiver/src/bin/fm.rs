@@ -4,6 +4,7 @@ use airspyhf::Device;
 
 use filters::{Decimator, FirDecimator};
 
+use filters::kernels::FM_32;
 use filters::kernels::FM_64;
 
 use num_complex::Complex32;
@@ -41,7 +42,9 @@ enum Commands {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let mut fir_dec: FirDecimator<Complex32, 64, 2> = FirDecimator::new(FM_64);
+    //let mut fir_dec: FirDecimator<Complex32, 64, 2> = FirDecimator::new(FM_64);
+    let mut fir_dec: FirDecimator<Complex32, 32, 2> = FirDecimator::new(FM_32);
+
     let mut output = Vec::<Complex32>::with_capacity(1024);
 
     let socket = UdpSocket::bind("0.0.0.0:0")?;

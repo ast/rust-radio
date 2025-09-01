@@ -1,14 +1,14 @@
 use libc::{
     MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE,
-    close, ftruncate, memfd_create, mmap, munmap, sysconf,
+    mmap, munmap, sysconf,
 };
-use std::ffi::CString;
+
 use std::ptr;
 use std::ptr::NonNull;
-
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use thiserror::Error;
+
+// todo: asfd?
+use crate::memfd::Memfd;
 
 #[derive(Debug, Error)]
 pub enum DoublemapeError {
@@ -25,21 +25,7 @@ pub struct Doublemap<T> {
     ptr: NonNull<T>,
     // len of one segment, we map 2x len to get mirror
     capacity: usize,
-    mem_fd: i32,
-}
-
-// Helper function to create a unique memfd name
-fn make_memfd_name(size: usize) -> CString {
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-
-    // Construct something like: "doublemap.4096.1715877445000"
-    let name = format!("doublemap.{}.{}", size, timestamp);
-
-    // Convert to CString for FFI use
-    CString::new(name).expect("CString::new failed (null byte in string?)")
+    mem_fd: Memfd,
 }
 
 // Helper function to get the system page size
@@ -70,22 +56,11 @@ impl<T: Copy> Doublemap<T> {
         // Round up requested capacity to the nearest page size
         let aligned_capacity = capacity.div_ceil(page_size) * page_size;
 
-        let name = make_memfd_name(aligned_capacity);
-
-        // Create a memfd
-        let mem_fd = unsafe { memfd_create(name.as_ptr(), 0) };
-        if mem_fd < 0 {
-            return Err(DoublemapeError::IO(std::io::Error::last_os_error()));
-        }
-
-        // Resize it it to the aligned_capacity
-        if unsafe { ftruncate(mem_fd, aligned_capacity as i64) } != 0 {
-            unsafe { close(mem_fd) };
-            return Err(DoublemapeError::IO(std::io::Error::last_os_error()));
-        }
+        let mem_fd = Memfd::new("rust-radio", aligned_capacity)?;
 
         // Reserve 2x space with PROT_NONE
         let total_size = aligned_capacity * 2;
+
         let reserved = unsafe {
             mmap(
                 ptr::null_mut(),
@@ -98,26 +73,26 @@ impl<T: Copy> Doublemap<T> {
         };
 
         if reserved == MAP_FAILED {
-            unsafe { close(mem_fd) };
+            // unsafe { close(mem_fd) };
             return Err(DoublemapeError::IO(std::io::Error::last_os_error()));
         }
 
         // First mapping
         let addr_hint_1 = reserved;
+
         let buffer_1 = unsafe {
             mmap(
                 addr_hint_1,
                 aligned_capacity,
                 PROT_READ | PROT_WRITE,
                 MAP_SHARED | MAP_FIXED,
-                mem_fd,
+                mem_fd.fd(),
                 0,
             )
         };
         if buffer_1 != addr_hint_1 || buffer_1 == MAP_FAILED {
             unsafe {
                 munmap(reserved, total_size);
-                close(mem_fd);
             }
             return Err(DoublemapeError::IO(std::io::Error::last_os_error()));
         }
@@ -130,7 +105,7 @@ impl<T: Copy> Doublemap<T> {
                 aligned_capacity,
                 PROT_READ | PROT_WRITE,
                 MAP_SHARED | MAP_FIXED,
-                mem_fd,
+                mem_fd.fd(),
                 0,
             )
         };
@@ -138,7 +113,6 @@ impl<T: Copy> Doublemap<T> {
             unsafe {
                 munmap(buffer_1, aligned_capacity);
                 munmap(reserved, total_size);
-                close(mem_fd);
             }
 
             return Err(DoublemapeError::IO(std::io::Error::last_os_error()));
@@ -186,7 +160,6 @@ impl<T> Drop for Doublemap<T> {
                 self.ptr.as_ptr() as *mut libc::c_void,
                 self.capacity * size_of_t * 2,
             );
-            close(self.mem_fd);
         }
     }
 }
@@ -216,9 +189,9 @@ mod tests {
         let len = slice.len() / 2;
 
         // Loop and fill with i % 256
-        for i in 0..len {
+        (0..len).for_each(|i| {
             slice[i] = (i % 256) as u8;
-        }
+        });
 
         // Check that the first and second halves are the same
         for i in 0..len {

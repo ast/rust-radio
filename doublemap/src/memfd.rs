@@ -1,16 +1,14 @@
 use std::ffi::CString;
 
-use libc::{
-    MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE,
-    close, ftruncate, memfd_create, mmap, munmap, sysconf,
-};
+use libc::{close, ftruncate, memfd_create};
 
-use std::os::unix::io::{AsFd, BorrowedFd};
-
+#[derive(Debug)]
 pub struct Memfd {
     fd: i32,
 }
 
+// Memfd is a wrapper around a memory file descriptor
+// to make sure it's dropped.
 impl Memfd {
     pub fn new(name: &str, size: usize) -> Result<Self, std::io::Error> {
         let c_name = CString::new(name)?;
@@ -35,12 +33,5 @@ impl Memfd {
 impl Drop for Memfd {
     fn drop(&mut self) {
         unsafe { close(self.fd) };
-    }
-}
-
-impl AsFd for Memfd {
-    fn as_fd(&self) -> BorrowedFd<'_> {
-        // SAFETY: self.fd is a valid open file descriptor owned by this struct
-        unsafe { BorrowedFd::borrow_raw(self.fd) }
     }
 }
