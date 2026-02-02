@@ -1564,7 +1564,6 @@ dependencies = [
  "clap",
  "cpal 0.17.1",
  "opus",
- "rand",
  "ringbuf",
  "rtp",
 ]
