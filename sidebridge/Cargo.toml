@@ -1,0 +1,10 @@
+[package]
+name = "sidebridge"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+async-trait = "0.1.89"
+serde = { version = "1.0.228", features = ["derive"] }
+thiserror = "2.0.18"
+tokio-stream = "0.1.18"
