@@ -3,6 +3,8 @@
 pub mod drivers;
 pub mod traits;
 
+pub mod civ_packet;
+
 // Re-export core types for convenience
 pub use crate::traits::{RadioMode, RadioState, RadioTrait, SpectrumFrame};
 

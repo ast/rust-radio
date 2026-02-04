@@ -12,6 +12,13 @@ deploy args="": upload
 build-pi:
     cross build -p {{binary}} --target {{target_pi}} --release
 
+build-bridge-pi:
+    cross build -p serial-bridge --target {{target_pi}} --release
+
+upload-bridge-pi:
+    scp target/{{target_pi}}/release/serial-bridge {{remote}}:~/
+    ssh {{remote}} "chmod +x ~/serial-bridge"
+
 # Transfer the Pi binary and ensure it is executable
 upload: build-pi
     scp target/{{target_pi}}/release/{{binary}} {{remote}}:~/
