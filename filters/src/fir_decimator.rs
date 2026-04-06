@@ -1,9 +1,10 @@
 use crate::DelayLine;
 use crate::decimator::Decimator;
+use crate::fir::dot_product;
 use crate::ringbuffer::RingBuffer;
 use std::ops::{Add, Mul};
 
-/// FirDecimator with power of two decimation factor
+/// FirDecimator with power of two decimation factor.
 pub struct FirDecimator<T, const N: usize, const D: usize = 2> {
     h: [f32; N],      // real-valued FIR coefficients
     z: RingBuffer<T>, // delay buffer
@@ -15,7 +16,6 @@ where
     T: Copy + Default,
 {
     pub fn new(h: [f32; N]) -> Self {
-        // Assert D is a power of two
         assert!(D.is_power_of_two(), "D must be a power of two");
 
         let taps = h.len();
@@ -27,16 +27,6 @@ where
     }
 }
 
-#[inline]
-fn dot_product<T>(a: &[f32], b: &[T]) -> T
-where
-    T: Copy + Default + std::ops::Mul<f32, Output = T> + std::ops::Add<Output = T>,
-{
-    a.iter()
-        .zip(b.iter())
-        .fold(T::default(), |acc, (&coeff, &sample)| acc + sample * coeff)
-}
-
 // Impl Decimator trait for FirDecimator
 impl<T, const N: usize, const D: usize> Decimator<T> for FirDecimator<T, N, D>
 where
@@ -44,11 +34,8 @@ where
 {
     #[inline]
     fn decimate(&mut self, x: T) -> Option<T> {
-        // Push the new sample into the delay line
-
         self.z.push(x);
         self.sample = self.sample.wrapping_add(1);
-        // Check if the write index if we should return a value
         if (self.sample & (D - 1)) != 0 {
             return None;
         }
@@ -56,28 +43,6 @@ where
         Some(dot_product(&self.h, self.z.as_slice()))
     }
 }
-
-// pub struct FirDecimatorIter<'a, T, I, const N: usize, const D: usize> {
-//     decimator: &'a mut FirDecimator<T, N, D>,
-//     input: I,
-// }
-
-// impl<'a, T, I, const N: usize, const D: usize> Iterator for FirDecimatorIter<'a, T, I, N, D>
-// where
-//     T: Copy,
-//     I: Iterator<Item = T>,
-// {
-//     type Item = f32;
-
-//     fn next(&mut self) -> Option<Self::Item> {
-//         while let Some(sample) = self.input.next() {
-//             if let Some(y) = self.decimator.decimate(sample) {
-//                 return Some(y);
-//             }
-//         }
-//         None
-//     }
-// }
 
 // Tests
 #[cfg(test)]

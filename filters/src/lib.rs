@@ -18,6 +18,7 @@ pub use chain_decimator::ChainableDecimator;
 pub use decimator::Decimator;
 pub use delay_line::DelayLine;
 pub use filter::Filter;
+pub use fir::dot_product;
 pub use fir::FirFilter3;
 pub use fir_decimator::FirDecimator;
 

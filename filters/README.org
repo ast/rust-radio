@@ -1,12 +1,145 @@
 * filters
 
-FIR filters and decimation chains for =Complex32= sample streams.
+FIR filters, decimation chains, and frequency shifting for =Complex32= IQ sample streams. Designed for real-time SDR processing at sample rates up to 768 kHz and beyond.
 
-- =FirFilter= — naive FIR implementation
-- =FirFilter3= / =FirFilter4= — optimized FIR implementations
-- =FirDecimator= — combined filter + decimation
-- =ChainDecimator= — cascaded half-band decimation stages
-- Pre-computed kernels for FM demodulation (=fm_200_768=, =fm_200_384=, =hb_35=)
+** Architecture
+
+Three traits define the DSP building blocks:
+
+- =Filter<T>= — sample-in, sample-out filtering
+- =Decimator<T>= — sample-in, optional sample-out (returns =Some= every D-th sample)
+- =DelayLine<T>= — push/read interface for FIR delay lines
+
+All are generic over =T=, so they work with both =f32= (audio) and =Complex32= (IQ).
+
+** FIR filter implementations
+
+Three implementations with increasing optimization:
+
+| Type | Coefficients | Delay line | Use case |
+|------+--------------+------------+----------|
+| =FirFilter= | =Vec<f32>= | =VecDeque<T>= | Reference / testing |
+| =FirFilter3= | =Vec<f32>= | =RingBuffer<T>= (doublemap) | Runtime-sized filters |
+| =FirFilter4<T, N>= | =[f32; N]= (const generic) | =RingBuffer<T>= (doublemap) | Known tap count at compile time |
+
+The =RingBuffer= uses a double memory-mapped region (see =doublemap= crate) so =as_slice()= always returns a contiguous view of the delay line — no split/copy needed for the dot product.
+
+*** Usage
+
+#+begin_src rust
+  use filters::{Filter, FirFilter4};
+  use num_complex::Complex32;
+
+  // 35-tap half-band filter with compile-time tap count
+  use filters::kernels::HB_35;
+  let mut fir = FirFilter4::new(HB_35);
+
+  let sample = Complex32::new(1.0, 0.0);
+  let filtered = fir.filter(sample);
+#+end_src
+
+** Decimation
+
+=FirDecimator<T, N, D>= combines FIR filtering with decimation by factor =D= (must be a power of two). The dot product is only computed every D-th sample — the other samples are pushed into the delay line but skipped.
+
+#+begin_src rust
+  use filters::{Decimator, FirDecimator};
+  use filters::kernels::HB_35;
+  use num_complex::Complex32;
+
+  // Decimate by 2: 768 kHz → 384 kHz
+  let mut dec: FirDecimator<Complex32, 35, 2> = FirDecimator::new(HB_35);
+
+  for sample in iq_samples {
+      if let Some(output) = dec.decimate(sample) {
+          // output at half the input rate
+      }
+  }
+#+end_src
+
+*** Chained decimation
+
+=ChainableDecimator= lets you cascade multiple stages. Each stage reduces the sample rate, so downstream stages process fewer samples. Use =chain_with()= to build the pipeline:
+
+#+begin_src rust
+  use filters::{ChainableDecimator, Decimator, FirDecimator};
+  use filters::kernels::HB_35;
+  use num_complex::Complex32;
+
+  // 768 kHz → 192 kHz → 48 kHz → 24 kHz  (÷4, ÷4, ÷2 = ÷32 total)
+  let fir0: FirDecimator<Complex32, 35, 4> = FirDecimator::new(HB_35);
+  let fir1: FirDecimator<Complex32, 35, 4> = FirDecimator::new(HB_35);
+  let fir2: FirDecimator<Complex32, 35, 2> = FirDecimator::new(HB_35);
+
+  let mut chain = fir0.chain_with(fir1).chain_with(fir2);
+
+  for sample in iq_samples {
+      if let Some(output) = chain.decimate(sample) {
+          // output at 24 kHz
+      }
+  }
+#+end_src
+
+** Frequency shifting
+
+=ComplexRotator= shifts a signal in frequency by multiplying each sample with a rotating phasor. The phase is periodically renormalized to prevent drift.
+
+#+begin_src rust
+  use filters::rotate::ComplexRotator;
+
+  // Shift signal down by 50 kHz, renormalize every 512 samples
+  let mut rot = ComplexRotator::new(-50_000.0, 768_000.0, 512);
+
+  for sample in iq_samples {
+      let shifted = rot.rotate(sample);
+  }
+#+end_src
+
+** Pre-computed kernels
+
+Filter coefficients designed with [[https://pypi.org/project/pyfda/][pyFDA]]:
+
+| Kernel | Taps | Description |
+|--------+------+-------------|
+| =HB_35= | 35 | Half-band filter (every other tap is zero) |
+| =FM_64= | 64 | FM demod, 200 kHz passband at 768 kHz sample rate |
+| =FM_32= | 32 | FM demod, 200 kHz passband at 384 kHz sample rate |
+
+** Performance
+
+Benchmarked on 1 second of 768 kHz =Complex32= IQ data (768,000 samples):
+
+*** FIR filter implementations (35-tap)
+
+| Implementation | Time | vs Naive |
+|----------------+-------+----------|
+| =FirFilter= (VecDeque) | 27.0 ms | baseline |
+| =FirFilter3= (RingBuffer) | 16.3 ms | 1.7× |
+| =FirFilter4= (const generic) | 12.7 ms | 2.1× |
+
+*** Decimation
+
+| Configuration | Time | Output rate |
+|---------------+-------+-------------|
+| HB35 ÷2 | 6.0 ms | 384 kHz |
+| FM32 ÷2 | 6.0 ms | 384 kHz |
+| FM64 ÷4 | 8.6 ms | 192 kHz |
+| 3-stage HB35 ÷32 | 9.4 ms | 24 kHz |
+| 4-stage HB35 ÷16 | 19.8 ms | 48 kHz |
+| FM path (÷4 → ÷2) | 13.7 ms | 96 kHz |
+
+*** Full receiver path
+
+| Configuration | Time | Real-time margin |
+|---------------+-------+------------------|
+| ComplexRotator alone | 5.1 ms | 196× |
+| Rotate + 3-stage ÷32 | 11.9 ms | 84× |
+
+Key observations:
+
+- A ÷4 first stage beats two ÷2 stages — 75% of samples are eliminated early, reducing work for downstream filters
+- The full rotate + decimate path (768 kHz → 24 kHz) runs at *84× real-time* — plenty of headroom for additional processing
+- =FirFilter4= (const generic) gives the compiler the loop bound, enabling full unrolling and vectorization
 
 ** Benchmarks
 

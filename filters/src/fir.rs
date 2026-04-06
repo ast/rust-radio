@@ -4,6 +4,17 @@ use crate::DelayLine;
 use crate::Filter;
 use crate::ringbuffer::RingBuffer;
 
+/// Dot product of FIR coefficients and delay line samples.
+#[inline]
+pub fn dot_product<T>(h: &[f32], z: &[T]) -> T
+where
+    T: Copy + Default + std::ops::Mul<f32, Output = T> + std::ops::Add<Output = T>,
+{
+    h.iter()
+        .zip(z.iter())
+        .fold(T::default(), |acc, (&coeff, &sample)| acc + sample * coeff)
+}
+
 /// FirFilter3
 pub struct FirFilter3<T> {
     h: Vec<f32>,      // real-valued FIR coefficients
@@ -21,16 +32,6 @@ where
             z: RingBuffer::new(taps),
         }
     }
-}
-
-#[inline]
-pub fn dot_product<T>(a: &[f32], b: &[T]) -> T
-where
-    T: Copy + Default + std::ops::Mul<f32, Output = T> + std::ops::Add<Output = T>,
-{
-    a.iter()
-        .zip(b.iter())
-        .fold(T::default(), |acc, (&coeff, &sample)| acc + sample * coeff)
 }
 
 // Impl Filter trait for FirFilter3
@@ -98,19 +99,11 @@ mod tests {
         let out_optimized2: Vec<_> = input.iter().map(|&x| optimized2.filter(x)).collect();
 
         assert_eq!(out_naive.len(), out_optimized2.len());
-        assert_eq!(out_naive.len(), out_optimized2.len());
 
         for (i, (&a, &b)) in out_naive.iter().zip(out_optimized2.iter()).enumerate() {
             assert!(
                 approx_eq_complexf32(a, b, 1e-6),
                 "Mismatch at sample {i}: naive = {a}, optimized = {b}"
-            );
-        }
-
-        for (i, (&a, &b)) in out_naive.iter().zip(out_optimized2.iter()).enumerate() {
-            assert!(
-                approx_eq_complexf32(a, b, 1e-6),
-                "Mismatch at sample {i}: naive = {a}, optimized2 = {b}"
             );
         }
     }

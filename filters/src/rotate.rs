@@ -54,7 +54,9 @@ mod tests {
 
     #[test]
     fn test_rotator_shifts_frequency_correctly() {
-        let len = 768_000;
+        // Test over a short window where cumulative drift between two
+        // independent oscillators hasn't diverged significantly.
+        let len = 2048;
         let sample_rate = 768_000.0;
         let freq_0 = 1_000.0;
         let freq_1 = -5_000.0;
@@ -68,17 +70,38 @@ mod tests {
         let osc1 = ComplexOscillator::new(freq_1, sample_rate);
         let expected: Vec<Complex32> = osc1.take(len).collect();
 
-        // Rotator to shift f1 → f2
+        // Rotator to shift f0 → f1
         let mut rot = ComplexRotator::new(delta_f, sample_rate, 512);
 
         let rotated: Vec<Complex32> = input.iter().map(|&x| rot.rotate(x)).collect();
 
         for (i, (r, e)) in rotated.iter().zip(expected.iter()).enumerate() {
             let ratio = r / e;
-            let phase_error = ratio.arg(); // should be ≈ 0 if r ≈ e (modulo amplitude)
+            let phase_error = ratio.arg();
             assert!(
-                phase_error.abs() < 5e-3,
+                phase_error.abs() < 1e-3,
                 "Phase error too large at sample {i}: rotated = {r}, expected = {e}, phase_error = {phase_error}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_rotator_preserves_magnitude() {
+        // Over a long run, the rotator should preserve signal magnitude
+        let len = 768_000;
+        let sample_rate = 768_000.0;
+        let mut rot = ComplexRotator::new(-5000.0, sample_rate, 512);
+
+        let osc = ComplexOscillator::new(1000.0, sample_rate);
+        let input = osc.take(len).collect::<Vec<_>>();
+
+        for (i, &x) in input.iter().enumerate() {
+            let y = rot.rotate(x);
+            assert!(
+                (y.norm() - x.norm()).abs() < 1e-4,
+                "Magnitude changed at sample {i}: input = {}, output = {}",
+                x.norm(),
+                y.norm()
             );
         }
     }
