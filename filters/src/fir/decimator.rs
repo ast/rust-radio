@@ -1,8 +1,9 @@
 use crate::DelayLine;
-use crate::decimator::Decimator;
-use crate::fir::dot_product;
+use crate::Decimator;
 use crate::ringbuffer::RingBuffer;
 use std::ops::{Add, Mul};
+
+use super::dot_product;
 
 /// FirDecimator with power of two decimation factor.
 pub struct FirDecimator<T, const N: usize, const D: usize = 2> {
@@ -27,7 +28,6 @@ where
     }
 }
 
-// Impl Decimator trait for FirDecimator
 impl<T, const N: usize, const D: usize> Decimator<T> for FirDecimator<T, N, D>
 where
     T: Copy + Default + Mul<f32, Output = T> + Add<Output = T>,
@@ -44,16 +44,15 @@ where
     }
 }
 
-// Tests
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::kernels::HB_35;
+    use crate::fir::kernels::HB_35;
     use num_complex::Complex32;
     use signals::ComplexOscillator;
 
-    use crate::chain_decimator::ChainableDecimator;
+    use crate::ChainableDecimator;
 
     #[test]
     fn test_fir_decimator() {

@@ -1,4 +1,4 @@
-// Filters are design with this tool
+// Filters are designed with this tool
 // https://pypi.org/project/pyfda/
 
 pub mod fm_200_384;

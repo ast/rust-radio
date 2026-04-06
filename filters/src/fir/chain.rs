@@ -1,4 +1,4 @@
-use crate::decimator::Decimator;
+use crate::Decimator;
 
 /// A way to chain decimators together
 pub struct ChainDecimator<D1, D2, T> {

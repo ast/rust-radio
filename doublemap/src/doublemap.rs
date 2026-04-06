@@ -1,6 +1,6 @@
 use nix::sys::memfd::{MFdFlags, memfd_create};
 use nix::sys::mman::{self, MapFlags, ProtFlags, munmap};
-use nix::unistd::ftruncate;
+use nix::unistd::{SysconfVar, ftruncate, sysconf};
 
 use std::ffi::CStr;
 use std::fmt;
@@ -15,6 +15,8 @@ pub enum DoublemapError {
     ZeroSizedType,
     #[error("Overflow")]
     Overflow,
+    #[error("Failed to determine page size")]
+    PageSize,
     #[error("{0}")]
     Nix(#[from] nix::Error),
 }
@@ -49,8 +51,8 @@ impl<T: Copy> Doublemap<T> {
             .checked_mul(size_of_t)
             .ok_or(DoublemapError::Overflow)?;
 
-        // TODO: look at this
-        let page_size = unsafe { nix::libc::sysconf(nix::libc::_SC_PAGESIZE) } as usize;
+        let page_size = sysconf(SysconfVar::PAGE_SIZE)?
+            .ok_or(DoublemapError::PageSize)? as usize;
 
         // Round up to page boundary
         let aligned = capacity_bytes.div_ceil(page_size) * page_size;

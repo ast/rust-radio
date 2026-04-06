@@ -1,26 +1,16 @@
-//pub mod bufferline;
-pub mod chain_decimator;
-pub mod decimator;
-pub mod delay_line;
-pub mod fast_fir;
-pub mod filter;
 pub mod fir;
-pub mod kernels;
-pub mod naive_fir;
 pub mod ringbuffer;
 pub mod rotate;
+pub mod traits;
 
-pub mod fir_decimator;
+// Trait re-exports
+pub use traits::{Decimator, DelayLine, Filter};
 
-pub use chain_decimator::ChainDecimator;
-pub use chain_decimator::ChainableDecimator;
-
-pub use decimator::Decimator;
-pub use delay_line::DelayLine;
-pub use filter::Filter;
+// FIR re-exports
+pub use fir::chain::{ChainDecimator, ChainableDecimator};
+pub use fir::constant::FirFilter;
+pub use fir::decimator::FirDecimator;
 pub use fir::dot_product;
-pub use fir::DynFirFilter;
-pub use fir_decimator::FirDecimator;
-
-pub use fast_fir::FirFilter;
-pub use naive_fir::NaiveFirFilter;
+pub use fir::dynamic::DynFirFilter;
+pub use fir::kernels;
+pub use fir::naive::NaiveFirFilter;

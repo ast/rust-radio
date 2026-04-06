@@ -2,8 +2,9 @@ use std::ops::{Add, Mul};
 
 use crate::DelayLine;
 use crate::Filter;
-use crate::fir::dot_product;
 use crate::ringbuffer::RingBuffer;
+
+use super::dot_product;
 
 /// FirFilter — const-generic FIR filter with stack-allocated coefficients.
 pub struct FirFilter<T, const N: usize> {
@@ -24,7 +25,6 @@ where
     }
 }
 
-// Impl Filter trait for FirFilter
 impl<T, const N: usize> Filter<T> for FirFilter<T, N>
 where
     T: Copy + Default + Mul<f32, Output = T> + Add<Output = T>,
@@ -40,7 +40,7 @@ mod tests {
     use super::*;
 
     use crate::NaiveFirFilter;
-    use crate::kernels::HB_35;
+    use crate::fir::kernels::HB_35;
 
     use num_complex::Complex32;
     use signals::ComplexOscillator;
@@ -86,7 +86,7 @@ mod tests {
     }
 
     #[test]
-    fn test_firfilter4_matches_naive_fir_long_signal() {
+    fn test_const_matches_naive_long_signal() {
         let sample_rate = 768_000.0;
         let signal_freq = 50_000.0;
 
