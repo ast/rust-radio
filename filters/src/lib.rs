@@ -19,8 +19,8 @@ pub use decimator::Decimator;
 pub use delay_line::DelayLine;
 pub use filter::Filter;
 pub use fir::dot_product;
-pub use fir::FirFilter3;
+pub use fir::DynFirFilter;
 pub use fir_decimator::FirDecimator;
 
-pub use fast_fir::FirFilter4;
-pub use naive_fir::FirFilter;
+pub use fast_fir::FirFilter;
+pub use naive_fir::NaiveFirFilter;

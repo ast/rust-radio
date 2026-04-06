@@ -5,27 +5,27 @@ use crate::Filter;
 use crate::fir::dot_product;
 use crate::ringbuffer::RingBuffer;
 
-/// FirFilter4 — const-generic FIR filter with stack-allocated coefficients.
-pub struct FirFilter4<T, const N: usize> {
+/// FirFilter — const-generic FIR filter with stack-allocated coefficients.
+pub struct FirFilter<T, const N: usize> {
     h: [f32; N],      // real-valued FIR coefficients
     z: RingBuffer<T>, // delay buffer
 }
 
-impl<T, const N: usize> FirFilter4<T, N>
+impl<T, const N: usize> FirFilter<T, N>
 where
     T: Copy + Default,
 {
     pub fn new(h: [f32; N]) -> Self {
         let taps = h.len();
-        FirFilter4 {
+        FirFilter {
             h,
             z: RingBuffer::new(taps),
         }
     }
 }
 
-// Impl Filter trait for FirFilter4
-impl<T, const N: usize> Filter<T> for FirFilter4<T, N>
+// Impl Filter trait for FirFilter
+impl<T, const N: usize> Filter<T> for FirFilter<T, N>
 where
     T: Copy + Default + Mul<f32, Output = T> + Add<Output = T>,
 {
@@ -39,7 +39,7 @@ where
 mod tests {
     use super::*;
 
-    use crate::FirFilter;
+    use crate::NaiveFirFilter;
     use crate::kernels::HB_35;
 
     use num_complex::Complex32;
@@ -58,7 +58,7 @@ mod tests {
         // Impulse response: [1.0] — should just copy the input
         let h = [1.0];
 
-        let mut filter = FirFilter4::new(h);
+        let mut filter = FirFilter::new(h);
 
         let input = vec![1.0, 2.0, 3.0, 4.0];
         let expected = input.clone();
@@ -71,7 +71,7 @@ mod tests {
     fn test_simple_moving_average() {
         // Moving average filter: y[n] = (x[n] + x[n-1]) / 2
         let h = [0.5, 0.5];
-        let mut filter = FirFilter4::new(h);
+        let mut filter = FirFilter::new(h);
 
         let input = [1.0, 2.0, 3.0, 4.0];
         let expected = [
@@ -96,8 +96,8 @@ mod tests {
         let osc = ComplexOscillator::new(signal_freq, sample_rate);
         let input = osc.take(len).collect::<Vec<_>>();
 
-        let mut naive = FirFilter::new(taps.to_vec());
-        let mut optimized2 = FirFilter4::new(taps);
+        let mut naive = NaiveFirFilter::new(taps.to_vec());
+        let mut optimized2 = FirFilter::new(taps);
 
         let out_naive: Vec<_> = input.iter().map(|&x| naive.filter(x)).collect();
         let out_optimized2: Vec<_> = input.iter().map(|&x| optimized2.filter(x)).collect();

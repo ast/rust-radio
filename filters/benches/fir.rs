@@ -4,7 +4,7 @@ use filters::ChainableDecimator;
 use filters::Decimator;
 use filters::FirDecimator;
 use filters::kernels::{FM_32, FM_64, HB_35};
-use filters::{Filter, FirFilter, FirFilter3, FirFilter4};
+use filters::{DynFirFilter, Filter, FirFilter, NaiveFirFilter};
 use signals::ComplexOscillator;
 
 use num_complex::Complex32;
@@ -26,27 +26,27 @@ fn bench_fir_implementations(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("FIR 35-tap 768k Complex32");
 
-    group.bench_function("FirFilter (naive/VecDeque)", |b| {
+    group.bench_function("NaiveFirFilter (VecDeque)", |b| {
         b.iter(|| {
-            let mut fir = FirFilter::new(coeffs.to_vec());
+            let mut fir = NaiveFirFilter::new(coeffs.to_vec());
             for &x in &input {
                 black_box(fir.filter(black_box(x)));
             }
         });
     });
 
-    group.bench_function("FirFilter3 (RingBuffer/Vec)", |b| {
+    group.bench_function("DynFirFilter (RingBuffer/Vec)", |b| {
         b.iter(|| {
-            let mut fir = FirFilter3::new(coeffs.to_vec());
+            let mut fir = DynFirFilter::new(coeffs.to_vec());
             for &x in &input {
                 black_box(fir.filter(black_box(x)));
             }
         });
     });
 
-    group.bench_function("FirFilter4 (RingBuffer/const N)", |b| {
+    group.bench_function("FirFilter (const N, RingBuffer)", |b| {
         b.iter(|| {
-            let mut fir = FirFilter4::new(coeffs);
+            let mut fir = FirFilter::new(coeffs);
             for &x in &input {
                 black_box(fir.filter(black_box(x)));
             }
@@ -164,18 +164,18 @@ fn bench_fir_f32(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("FIR 35-tap 48k f32");
 
-    group.bench_function("FirFilter (naive)", |b| {
+    group.bench_function("NaiveFirFilter", |b| {
         b.iter(|| {
-            let mut fir = FirFilter::new(coeffs.to_vec());
+            let mut fir = NaiveFirFilter::new(coeffs.to_vec());
             for &x in &input {
                 black_box(fir.filter(black_box(x)));
             }
         });
     });
 
-    group.bench_function("FirFilter4 (const N)", |b| {
+    group.bench_function("FirFilter (const N, RingBuffer)", |b| {
         b.iter(|| {
-            let mut fir = FirFilter4::new(coeffs);
+            let mut fir = FirFilter::new(coeffs);
             for &x in &input {
                 black_box(fir.filter(black_box(x)));
             }

@@ -3,26 +3,26 @@ use std::collections::VecDeque;
 use std::ops::{Add, Mul};
 
 /// Naive FIR filter implementation, useful for testing and educational purposes.
-pub struct FirFilter<T> {
+pub struct NaiveFirFilter<T> {
     h: Vec<f32>,
     z: VecDeque<T>,
 }
 
-impl<T> FirFilter<T>
+impl<T> NaiveFirFilter<T>
 where
     T: Copy + Default,
 {
     pub fn new(h: Vec<f32>) -> Self {
         let len = h.len();
 
-        FirFilter {
+        NaiveFirFilter {
             h,
             z: VecDeque::from(vec![T::default(); len]),
         }
     }
 }
 
-impl<T> Filter<T> for FirFilter<T>
+impl<T> Filter<T> for NaiveFirFilter<T>
 where
     T: Copy + Default + Mul<f32, Output = T> + Add<Output = T>,
 {
@@ -56,7 +56,7 @@ mod tests {
     fn test_impulse_identity() {
         // Impulse response: [1.0] — should just copy the input
         let h = vec![1.0];
-        let mut filter = FirFilter::new(h);
+        let mut filter = NaiveFirFilter::new(h);
 
         let input = vec![1.0, 2.0, 3.0, 4.0];
         let expected = input.clone();
@@ -69,7 +69,7 @@ mod tests {
     fn test_simple_moving_average() {
         // Moving average filter: y[n] = (x[n] + x[n-1]) / 2
         let h = vec![0.5, 0.5];
-        let mut filter = FirFilter::new(h);
+        let mut filter = NaiveFirFilter::new(h);
 
         let input = [1.0, 2.0, 3.0, 4.0];
         let expected = [
@@ -86,7 +86,7 @@ mod tests {
     #[test]
     fn test_zero_input() {
         let h = vec![0.3, 0.6, 0.1];
-        let mut filter = FirFilter::new(h);
+        let mut filter = NaiveFirFilter::new(h);
         let input = vec![0.0; 5];
         let expected = vec![0.0; 5];
 

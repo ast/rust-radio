@@ -18,21 +18,21 @@ Three implementations with increasing optimization:
 
 | Type | Coefficients | Delay line | Use case |
 |------+--------------+------------+----------|
-| =FirFilter= | =Vec<f32>= | =VecDeque<T>= | Reference / testing |
-| =FirFilter3= | =Vec<f32>= | =RingBuffer<T>= (doublemap) | Runtime-sized filters |
-| =FirFilter4<T, N>= | =[f32; N]= (const generic) | =RingBuffer<T>= (doublemap) | Known tap count at compile time |
+| =NaiveFirFilter= | =Vec<f32>= | =VecDeque<T>= | Reference / testing |
+| =DynFirFilter= | =Vec<f32>= | =RingBuffer<T>= (doublemap) | Runtime-sized filters |
+| =FirFilter<T, N>= | =[f32; N]= (const generic) | =RingBuffer<T>= (doublemap) | Default — known tap count at compile time |
 
 The =RingBuffer= uses a double memory-mapped region (see =doublemap= crate) so =as_slice()= always returns a contiguous view of the delay line — no split/copy needed for the dot product.
 
 *** Usage
 
 #+begin_src rust
-  use filters::{Filter, FirFilter4};
+  use filters::{Filter, FirFilter};
   use num_complex::Complex32;
 
   // 35-tap half-band filter with compile-time tap count
   use filters::kernels::HB_35;
-  let mut fir = FirFilter4::new(HB_35);
+  let mut fir = FirFilter::new(HB_35);
 
   let sample = Complex32::new(1.0, 0.0);
   let filtered = fir.filter(sample);
@@ -40,7 +40,7 @@ The =RingBuffer= uses a double memory-mapped region (see =doublemap= crate) so =
 
 ** Decimation
 
-=FirDecimator<T, N, D>= combines FIR filtering with decimation by factor =D= (must be a power of two). The dot product is only computed every D-th sample — the other samples are pushed into the delay line but skipped.
+=FirDecimator<T, N, D>= combines =FirFilter= with decimation by factor =D= (must be a power of two). The dot product is only computed every D-th sample — the other samples are pushed into the delay line but skipped.
 
 #+begin_src rust
   use filters::{Decimator, FirDecimator};
@@ -113,9 +113,9 @@ Benchmarked on 1 second of 768 kHz =Complex32= IQ data (768,000 samples):
 
 | Implementation | Time | vs Naive |
 |----------------+-------+----------|
-| =FirFilter= (VecDeque) | 27.0 ms | baseline |
-| =FirFilter3= (RingBuffer) | 16.3 ms | 1.7× |
-| =FirFilter4= (const generic) | 12.7 ms | 2.1× |
+| =NaiveFirFilter= (VecDeque) | 31.6 ms | baseline |
+| =DynFirFilter= (RingBuffer) | 16.2 ms | 2.0× |
+| =FirFilter= (const generic) | 12.5 ms | 2.5× |
 
 *** Decimation
 
@@ -123,8 +123,8 @@ Benchmarked on 1 second of 768 kHz =Complex32= IQ data (768,000 samples):
 |---------------+-------+-------------|
 | HB35 ÷2 | 6.0 ms | 384 kHz |
 | FM32 ÷2 | 6.0 ms | 384 kHz |
-| FM64 ÷4 | 8.6 ms | 192 kHz |
-| 3-stage HB35 ÷32 | 9.4 ms | 24 kHz |
+| FM64 ÷4 | 8.4 ms | 192 kHz |
+| 3-stage HB35 ÷32 | 9.3 ms | 24 kHz |
 | 4-stage HB35 ÷16 | 19.8 ms | 48 kHz |
 | FM path (÷4 → ÷2) | 13.7 ms | 96 kHz |
 
@@ -139,7 +139,7 @@ Key observations:
 
 - A ÷4 first stage beats two ÷2 stages — 75% of samples are eliminated early, reducing work for downstream filters
 - The full rotate + decimate path (768 kHz → 24 kHz) runs at *84× real-time* — plenty of headroom for additional processing
-- =FirFilter4= (const generic) gives the compiler the loop bound, enabling full unrolling and vectorization
+- =FirFilter= (const generic) gives the compiler the loop bound, enabling full unrolling and vectorization
 
 ** Benchmarks
 

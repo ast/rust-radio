@@ -15,27 +15,27 @@ where
         .fold(T::default(), |acc, (&coeff, &sample)| acc + sample * coeff)
 }
 
-/// FirFilter3
-pub struct FirFilter3<T> {
+/// DynFirFilter
+pub struct DynFirFilter<T> {
     h: Vec<f32>,      // real-valued FIR coefficients
     z: RingBuffer<T>, // delay buffer
 }
 
-impl<T> FirFilter3<T>
+impl<T> DynFirFilter<T>
 where
     T: Copy + Default,
 {
     pub fn new(h: Vec<f32>) -> Self {
         let taps = h.len();
-        FirFilter3 {
+        DynFirFilter {
             h,
             z: RingBuffer::new(taps),
         }
     }
 }
 
-// Impl Filter trait for FirFilter3
-impl<T> Filter<T> for FirFilter3<T>
+// Impl Filter trait for DynFirFilter
+impl<T> Filter<T> for DynFirFilter<T>
 where
     T: Copy + Default + Mul<f32, Output = T> + Add<Output = T>,
 {
@@ -49,7 +49,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::FirFilter;
+    use crate::NaiveFirFilter;
     use num_complex::Complex32;
     use signals::ComplexOscillator;
 
@@ -66,8 +66,8 @@ mod tests {
         let taps = vec![0.25, 0.5, 0.25];
         let input: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
 
-        let mut naive = FirFilter::new(taps.clone());
-        let mut optimized = FirFilter3::new(taps);
+        let mut naive = NaiveFirFilter::new(taps.clone());
+        let mut optimized = DynFirFilter::new(taps);
 
         let out_naive: Vec<f32> = input.iter().map(|&x| naive.filter(x)).collect();
         let out_optimized: Vec<f32> = input.iter().map(|&x| optimized.filter(x)).collect();
@@ -92,8 +92,8 @@ mod tests {
         let osc = ComplexOscillator::new(signal_freq, sample_rate);
         let input = osc.take(len).collect::<Vec<_>>();
 
-        let mut naive = FirFilter::new(taps.clone());
-        let mut optimized2 = FirFilter3::new(taps);
+        let mut naive = NaiveFirFilter::new(taps.clone());
+        let mut optimized2 = DynFirFilter::new(taps);
 
         let out_naive: Vec<_> = input.iter().map(|&x| naive.filter(x)).collect();
         let out_optimized2: Vec<_> = input.iter().map(|&x| optimized2.filter(x)).collect();
