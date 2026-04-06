@@ -1,0 +1,17 @@
+* airspyhf
+
+Safe Rust wrapper around =airspyhf-sys=. Provides a =Device= struct for opening, configuring, and streaming IQ samples (=Complex32=) from AirspyHF+ receivers.
+
+** Features
+
+- Open device by index or serial number
+- Set frequency and sample rate
+- Callback-based streaming with automatic resource cleanup on drop
+- Device enumeration via =list_devices()=
+
+** Usage
+
+#+begin_src bash
+  cargo build -p airspyhf
+  cargo test -p airspyhf  # hardware-dependent tests are #[ignore]
+#+end_src

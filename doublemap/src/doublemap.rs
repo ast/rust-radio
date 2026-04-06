@@ -25,7 +25,7 @@ pub struct Doublemap<T> {
     ptr: NonNull<T>,
     // len of one segment, we map 2x len to get mirror
     capacity: usize,
-    mem_fd: Memfd,
+    _mem_fd: Memfd,
 }
 
 // Helper function to get the system page size
@@ -122,7 +122,7 @@ impl<T: Copy> Doublemap<T> {
             ptr: NonNull::new(buffer_1 as *mut T)
                 .expect("mmap returned null pointer, which should not happen"),
             capacity: aligned_capacity / size_of_t,
-            mem_fd,
+            _mem_fd: mem_fd,
         })
     }
 

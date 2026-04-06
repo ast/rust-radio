@@ -5,7 +5,6 @@ use airspyhf::Device;
 use filters::{Decimator, FirDecimator};
 
 use filters::kernels::FM_32;
-use filters::kernels::FM_64;
 
 use num_complex::Complex32;
 
@@ -50,7 +49,7 @@ fn main() -> Result<()> {
     let socket = UdpSocket::bind("0.0.0.0:0")?;
     let target_addr: SocketAddr = "127.0.0.1:7373".parse()?;
 
-    let addr = match &cli.command {
+    match &cli.command {
         Commands::Start {
             frequency,
             samplerate,
@@ -118,35 +117,17 @@ fn main() -> Result<()> {
             loop {
                 // Fetch updated process stats
                 let stat = process.stat().expect("Failed to read process stat");
-                let mem = process.status().expect("Failed to read memory status");
+                let _mem = process.status().expect("Failed to read memory status");
 
                 println!("Elapsed time: {:.2?}", start.elapsed());
                 println!(
                     "CPU time (user + sys): {:.2} sec",
                     stat.utime as f64 / 100.0 + stat.stime as f64 / 100.0
                 );
-                // println!("RSS memory: {} KB", mem.vm_rss.unwrap_or(0));
                 println!("Threads: {}", stat.num_threads);
-
-                // println!(
-                //     "CPU time (user + sys): {:.2} sec",
-                //     stat.utime as f64 / 100.0 + stat.stime as f64 / 100.0
-                // );
-                // // println!("RSS memory: {} KB", mem.vm_rss.unwrap_or(0));
-                // println!("Threads: {}", stat.num_threads);
 
                 std::thread::sleep(Duration::from_secs(1));
             }
-
-            // let mut input = String::new();
-            // std::io::stdin()
-            //     .read_line(&mut input)
-            //     .context("Failed to read input")?;
-
-            // Stop streaming
-            device.stop().context("Failed to stop device")?;
         }
-    };
-
-    Ok(())
+    }
 }

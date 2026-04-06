@@ -1,0 +1,13 @@
+* airspyhf-sys
+
+Raw FFI bindings to =libairspyhf=, generated at build time using =bindgen=.
+
+** Requirements
+
+The =libairspyhf= C library and headers must be installed on the system. The build script links against =libairspyhf= and looks in =/usr/local/lib=.
+
+** Building
+
+#+begin_src bash
+  cargo build -p airspyhf-sys
+#+end_src

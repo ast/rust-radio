@@ -1,0 +1,15 @@
+* signals
+
+Signal sources for SDR processing, all implementing =Iterator<Item = Complex32>=.
+
+- =ComplexOscillator= — standard complex oscillator
+- =ComplexOscillatorFast= — batch-optimized oscillator using periodic phase reset
+- =ComplexFs4Oscillator= — optimized for Fs/4 frequency (multiplication-free)
+- =FileSource= — read IQ samples from file
+- =NoiseSource= — random noise generator
+
+** Benchmarks
+
+#+begin_src bash
+  cargo bench -p signals
+#+end_src

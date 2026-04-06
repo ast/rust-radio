@@ -1,0 +1,14 @@
+* pool
+
+Allocation-free buffer pools for real-time audio and signal processing paths.
+
+- =BufferPool<T>= — pre-allocates a fixed number of =Vec<T>= buffers behind =Arc=, hands out =BufferGuard= handles that automatically return buffers when dropped
+- =ChannelPool= — channel-based variant
+
+Blocking via =parking_lot= condvar when all buffers are in use.
+
+** Benchmarks
+
+#+begin_src bash
+  cargo bench -p pool
+#+end_src

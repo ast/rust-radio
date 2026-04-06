@@ -1,0 +1,15 @@
+* filters
+
+FIR filters and decimation chains for =Complex32= sample streams.
+
+- =FirFilter= — naive FIR implementation
+- =FirFilter3= / =FirFilter4= — optimized FIR implementations
+- =FirDecimator= — combined filter + decimation
+- =ChainDecimator= — cascaded half-band decimation stages
+- Pre-computed kernels for FM demodulation (=fm_200_768=, =fm_200_384=, =hb_35=)
+
+** Benchmarks
+
+#+begin_src bash
+  cargo bench -p filters
+#+end_src

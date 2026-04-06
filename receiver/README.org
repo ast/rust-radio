@@ -1,0 +1,15 @@
+* receiver
+
+Main SDR receiver application. Streams IQ samples from an AirspyHF+ device, computes the power density spectrum, and serves it to clients over a Unix domain socket (=/tmp/echo.sock=).
+
+** Architecture
+
+1. AirspyHF callback writes IQ into a =doublemap= ring buffer
+2. FFT worker thread consumes from the ring buffer, computes spectrum via =spectrum::Analyzer=, and sends results through a =crossbeam= bounded channel
+3. Unix socket server thread accepts one client at a time and streams framed spectrum data
+
+** Usage
+
+#+begin_src bash
+  cargo run -p receiver -- start --frequency 89300000 --samplerate 768000
+#+end_src

@@ -1,0 +1,12 @@
+* sidebridge
+
+Async radio control abstraction layer. Defines the =RadioTrait= interface that all radio drivers must implement, along with shared types.
+
+** Core types
+
+- =RadioTrait= — async trait for frequency/mode/PTT control and state streaming
+- =RadioState= — snapshot of frequency, mode, PTT, and RF power
+- =RadioMode= — LSB, USB, AM, FM, CW, RTTY, and data modes
+- =SpectrumFrame= — spectrum scope data for waterfall rendering
+- =RadioError= — typed error hierarchy (IO, timeout, protocol, busy, unsupported)
+- =CivPacket= — Icom CI-V packet serialization (default addresses for IC-705)

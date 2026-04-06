@@ -1,6 +1,6 @@
 // Copyright (c) SM6WJM 2026
 
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::Bytes;
 
 #[derive(Debug, PartialEq)]
 pub enum CivCommand {
@@ -36,12 +36,6 @@ fn encode_u64_to_bcd(mut freq: u64) -> Vec<u8> {
         bcd.push((high << 4) | low);
     }
     bcd
-}
-
-fn encode_u8_to_bcd(val: u8) -> u8 {
-    let low = val % 10;
-    let high = (val / 10) % 10;
-    (high << 4) | low
 }
 
 impl CivCommand {

@@ -1,0 +1,14 @@
+* spectrum
+
+FFT-based spectrum analyzer for computing power density spectra from IQ samples.
+
+- Hann windowing with =(-1)^n= shift to center DC
+- Radix-4 FFT via =rustfft=
+- Output in dBFS with window and FFT length corrections
+- Frequency/bin conversion utilities
+
+** Benchmarks
+
+#+begin_src bash
+  cargo bench -p spectrum
+#+end_src

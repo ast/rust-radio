@@ -1,0 +1,18 @@
+* doublemap
+
+Lock-free ring buffer built on a double memory-mapped region using Linux =memfd_create=. The second half of the virtual address space maps to the same physical pages as the first, so producers and consumers always see contiguous slices without copying.
+
+- =Doublemap<T>= — the underlying double-mapped buffer (Linux-only)
+- =Producer<T>= / =Consumer<T>= — thread-safe ring buffer pair with condvar-based blocking
+
+** Usage
+
+#+begin_src rust
+  let (producer, consumer) = ring_buffer_pair::<Complex32>(2048, 32768);
+#+end_src
+
+** Benchmarks
+
+#+begin_src bash
+  cargo bench -p doublemap
+#+end_src

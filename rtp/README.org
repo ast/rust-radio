@@ -1,0 +1,15 @@
+* rtp
+
+RTP (Real-time Transport Protocol) header construction and serialization per RFC 3550.
+
+- Random initial sequence number, timestamp, and SSRC
+- =advance()= increments sequence and timestamp for each packet
+- Defaults to Opus payload type (111)
+
+** Usage
+
+#+begin_src rust
+  let mut header = RtpHeader::new(96);
+  let bytes = header.serialize(); // 12-byte fixed header
+  header.advance(960);            // advance by one Opus frame
+#+end_src
