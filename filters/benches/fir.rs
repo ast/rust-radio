@@ -4,6 +4,7 @@ use filters::ChainableDecimator;
 use filters::Decimator;
 use filters::FirDecimator;
 use filters::kernels::{FM_32, FM_64, HB_35};
+use filters::fir::{dot_product, dot_product_naive};
 use filters::{DynFirFilter, Filter, FirFilter, NaiveFirFilter};
 use signals::ComplexOscillator;
 
@@ -185,8 +186,47 @@ fn bench_fir_f32(c: &mut Criterion) {
     group.finish();
 }
 
+/// Isolated dot product benchmark — measures the inner loop without
+/// delay line overhead. This is the core operation that determines
+/// FIR filter throughput.
+fn bench_dot_product(c: &mut Criterion) {
+    let coeffs = HB_35;
+    let input = iq_768k();
+    // Use a slice the size of the filter as the delay line snapshot
+    let z = &input[..coeffs.len()];
+
+    let mut group = c.benchmark_group("dot_product 35-tap Complex32");
+
+    group.bench_function("naive (single accumulator)", |b| {
+        b.iter(|| black_box(dot_product_naive(black_box(&coeffs), black_box(z))))
+    });
+
+    group.bench_function("4-way (four accumulators)", |b| {
+        b.iter(|| black_box(dot_product(black_box(&coeffs), black_box(z))))
+    });
+
+    group.finish();
+
+    // Also benchmark with 64-tap (FM_64) to see scaling
+    let coeffs64 = FM_64;
+    let z64 = &input[..coeffs64.len()];
+
+    let mut group = c.benchmark_group("dot_product 64-tap Complex32");
+
+    group.bench_function("naive (single accumulator)", |b| {
+        b.iter(|| black_box(dot_product_naive(black_box(&coeffs64), black_box(z64))))
+    });
+
+    group.bench_function("4-way (four accumulators)", |b| {
+        b.iter(|| black_box(dot_product(black_box(&coeffs64), black_box(z64))))
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
+    bench_dot_product,
     bench_fir_implementations,
     bench_decimation,
     bench_chain_decimation,
