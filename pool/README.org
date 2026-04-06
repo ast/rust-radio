@@ -1,11 +1,84 @@
 * pool
 
-Allocation-free buffer pools for real-time audio and signal processing paths.
+Pre-allocated buffer pools for real-time signal processing paths.
 
-- =BufferPool<T>= — pre-allocates a fixed number of =Vec<T>= buffers behind =Arc=, hands out =BufferGuard= handles that automatically return buffers when dropped
-- =ChannelPool= — channel-based variant
+** Why buffer pools in SDR?
 
-Blocking via =parking_lot= condvar when all buffers are in use.
+In software-defined radio, sample data flows continuously from hardware at a fixed rate (e.g. 768 kHz). If a processing stage calls =malloc= mid-stream, the allocator may take a lock, trigger a page fault, or fragment the heap — any of which can cause dropped samples. Buffer pools solve this by pre-allocating all memory at startup. Processing stages borrow and return fixed-size buffers with zero allocation overhead during the real-time loop.
+
+The RAII =BufferGuard= ensures buffers are always returned to the pool, even on early returns or panics — no leaked buffers, no manual bookkeeping.
+
+** Implementations
+
+Two pool implementations with identical semantics:
+
+- =BufferPool<T>= — =parking_lot= mutex + condvar. Requires =Arc<Self>= because the pool is shared between guards and callers.
+- =ChannelPool<T>= — =crossbeam= bounded channel. Simpler API (no =Arc= wrapping needed).
+
+Both block on =get()= when all buffers are in use, providing natural backpressure.
+
+Performance is identical (~200 ms for 1000 round-trips of 128 KB buffers between threads). The synchronization overhead is negligible compared to the actual memory access cost.
+
+** Usage
+
+*** =BufferPool=
+
+#+begin_src rust
+  use pool::BufferPool;
+
+  // Pre-allocate 10 buffers of 32768 f32 samples each
+  let pool = BufferPool::<f32>::new(10, 32768);
+
+  // Borrow a buffer (blocks if all 10 are in use)
+  let mut buf = pool.get();
+
+  // BufferGuard derefs to &mut [T]
+  buf[0] = 1.0;
+  process_samples(&buf);
+
+  // Buffer is returned to the pool when `buf` is dropped
+#+end_src
+
+*** =ChannelPool=
+
+#+begin_src rust
+  use pool::ChannelPool;
+
+  let pool = ChannelPool::<f32>::new(10, 32768);
+
+  let mut buf = pool.get();
+  buf[0] = 1.0;
+  // returned on drop, same as BufferPool
+#+end_src
+
+*** Sending buffers between threads
+
+Buffers can be sent through channels to decouple producer and consumer stages. The buffer is returned to the pool when the last owner drops it.
+
+#+begin_src rust
+  use pool::ChannelPool;
+  use std::sync::mpsc::channel;
+
+  let pool = ChannelPool::<f32>::new(10, 32768);
+  let (tx, rx) = channel();
+
+  // Producer thread
+  std::thread::spawn(move || {
+      loop {
+          let mut buf = pool.get();
+          fill_from_hardware(&mut buf);
+          tx.send(buf).unwrap();
+      }
+  });
+
+  // Consumer thread
+  std::thread::spawn(move || {
+      for buf in rx {
+          process_fft(&buf);
+          // buf dropped here → returned to pool
+      }
+  });
+#+end_src
 
 ** Benchmarks
 

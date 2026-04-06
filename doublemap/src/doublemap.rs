@@ -49,6 +49,7 @@ impl<T: Copy> Doublemap<T> {
             .checked_mul(size_of_t)
             .ok_or(DoublemapError::Overflow)?;
 
+        // TODO: look at this
         let page_size = unsafe { nix::libc::sysconf(nix::libc::_SC_PAGESIZE) } as usize;
 
         // Round up to page boundary

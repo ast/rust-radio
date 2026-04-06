@@ -25,23 +25,22 @@ impl<T: Default + Clone> BufferPool<T> {
         let mut pool = self.pool.lock();
         // Wait until there is a buffer available
         self.condvar.wait_while(&mut pool, |pool| pool.is_empty());
-        let buffer = pool.pop().expect("Buffer pool is empty!!!");
+        let buffer = pool.pop().expect("condvar woke but pool is empty");
         BufferGuard {
             buffer: Some(buffer),
             pool: Arc::clone(self),
         }
     }
 
-    pub fn put(&self, buffer: Arc<Vec<T>>) {
+    fn put(&self, buffer: Arc<Vec<T>>) {
         let mut pool = self.pool.lock();
 
-        assert_eq!(
+        debug_assert_eq!(
             Arc::strong_count(&buffer),
             1,
-            "Buffer has more than one reference!"
+            "buffer has more than one reference on return to pool"
         );
 
-        // There will always be space to put it back
         pool.push(buffer);
 
         // Notify one waiting thread that a buffer is available
@@ -49,30 +48,16 @@ impl<T: Default + Clone> BufferPool<T> {
     }
 }
 
-#[derive(Clone)]
 pub struct BufferGuard<T: Default + Clone> {
-    // Buffer has to be an Option, so we can take it and leave None in
-    // self and return it to the pool when dropped.
+    // Option so we can take it in Drop and leave None behind
     buffer: Option<Arc<Vec<T>>>,
     pool: Arc<BufferPool<T>>,
 }
 
-impl<T: Default + Clone> BufferGuard<T> {
-    pub fn ref_count(&self) -> usize {
-        Arc::strong_count(self.buffer.as_ref().unwrap())
-    }
-}
-
 impl<T: Default + Clone> Drop for BufferGuard<T> {
     fn drop(&mut self) {
-        // Take buffer, leaving None in self
-        let buf = self.buffer.take().expect("Buffer already taken!");
-
-        // If this is the last reference to the buffer, return it to the pool
-        if Arc::strong_count(&buf) == 1 {
-            self.pool.put(buf);
-        }
-        // Else: someone else still holds a reference
+        let buf = self.buffer.take().expect("buffer already taken");
+        self.pool.put(buf);
     }
 }
 
@@ -86,7 +71,7 @@ impl<T: Default + Clone> Deref for BufferGuard<T> {
 impl<T: Default + Clone> DerefMut for BufferGuard<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         Arc::get_mut(self.buffer.as_mut().unwrap())
-            .expect("multiple references exist")
+            .expect("buffer has outstanding clones — cannot mutate")
             .as_mut_slice()
     }
 }
@@ -128,74 +113,91 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // This test is ignored because it requires a multi-threaded environment
-    fn test_reuse() {
-        let pool = BufferPool::<f32>::new(2, 8);
-        {
-            let mut buf = pool.get();
-
-            buf[0] = 1.23;
-
-            // clone the buffer
-            let buf_clone = buf.clone();
-
-            // print refcount of the buffer
-            println!("Buffer refcount: {}", buf_clone.ref_count());
-
-            assert_eq!(buf_clone[0], 1.23);
-        } // buffer returned to pool
-
-        {
-            // get the buffer again
-            let buf = pool.get();
-            assert_eq!(buf[0], 0f32);
-        }
-    }
-
-    #[test]
     fn test_threaded_buffer_reuse() {
         const BUF_SIZE: usize = 2048;
         const POOL_SIZE: usize = 10;
-        const NUM_MESSAGES: usize = 10;
+        const NUM_MESSAGES: usize = 100;
 
         thread::scope(|s| {
             let pool = BufferPool::<u32>::new(POOL_SIZE, BUF_SIZE);
-            // create channels
             let (tx, rx) = channel();
 
             s.spawn(move || {
                 for i in 0..NUM_MESSAGES {
                     let mut buf = pool.get();
 
-                    // mut slice from buf
                     for j in 0..BUF_SIZE {
                         buf[j] = j as u32 + i as u32 * BUF_SIZE as u32;
                     }
 
                     tx.send(buf).unwrap();
-                    // sleep
-                    thread::sleep(std::time::Duration::from_millis(100));
                 }
             });
 
             s.spawn(move || {
-                let mut received = 0;
-
                 for _ in 0..NUM_MESSAGES {
-                    for _ in 0..10 {
-                        match rx.recv() {
-                            Ok(buf) => {
-                                // check the buffer
-                                assert_eq!(buf.len(), BUF_SIZE);
-                                received += 1;
-                            }
-                            Err(e) => eprintln!("Failed to receive buffer: {}", e),
-                        }
-                    }
+                    let buf = rx.recv().unwrap();
+                    assert_eq!(buf.len(), BUF_SIZE);
                 }
-
-                assert_eq!(received, 10);
             });
         });
+    }
+
+    #[test]
+    fn test_pool_exhaustion_blocks() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::time::Duration;
+
+        let pool = BufferPool::<u8>::new(1, 64);
+        let unblocked = Arc::new(AtomicBool::new(false));
+
+        // Take the only buffer
+        let buf = pool.get();
+
+        let unblocked2 = unblocked.clone();
+        let pool2 = Arc::clone(&pool);
+        let handle = thread::spawn(move || {
+            // This should block until we drop buf
+            let _buf2 = pool2.get();
+            unblocked2.store(true, Ordering::SeqCst);
+        });
+
+        // Give the other thread time to block
+        thread::sleep(Duration::from_millis(50));
+        assert!(!unblocked.load(Ordering::SeqCst), "should still be blocked");
+
+        // Release — other thread should unblock
+        drop(buf);
+        handle.join().unwrap();
+        assert!(unblocked.load(Ordering::SeqCst), "should have unblocked");
+    }
+
+    #[test]
+    fn test_concurrent_get_return() {
+        const POOL_SIZE: usize = 4;
+        const ROUNDS: usize = 500;
+
+        let pool = BufferPool::<u8>::new(POOL_SIZE, 128);
+
+        thread::scope(|s| {
+            for _ in 0..8 {
+                let pool = Arc::clone(&pool);
+                s.spawn(move || {
+                    for _ in 0..ROUNDS {
+                        let mut buf = pool.get();
+                        buf[0] = 42;
+                        // buf returned on drop
+                    }
+                });
+            }
+        });
+
+        // All buffers should be back in the pool
+        // We can get POOL_SIZE buffers without blocking
+        let mut guards = Vec::new();
+        for _ in 0..POOL_SIZE {
+            guards.push(pool.get());
+        }
+        assert_eq!(guards.len(), POOL_SIZE);
     }
 }

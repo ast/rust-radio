@@ -18,15 +18,13 @@ fn bench_buffer_reuse(c: &mut Criterion) {
             let (tx, rx) = channel();
 
             thread::scope(|s| {
-                s.spawn({
-                    || {
-                        for i in 0..NUM_MESSAGES {
-                            let mut buf = pool.get();
-                            for j in 0..BUF_SIZE {
-                                buf[j] = j as u32;
-                            }
-                            tx.send(buf).unwrap();
+                s.spawn(|| {
+                    for _ in 0..NUM_MESSAGES {
+                        let mut buf = pool.get();
+                        for j in 0..BUF_SIZE {
+                            buf[j] = j as u32;
                         }
+                        tx.send(buf).unwrap();
                     }
                 });
 
@@ -52,15 +50,13 @@ fn bench_buffer_reuse(c: &mut Criterion) {
             let (tx, rx) = channel();
 
             thread::scope(|s| {
-                s.spawn({
-                    || {
-                        for i in 0..NUM_MESSAGES {
-                            let mut buf = pool.get();
-                            for j in 0..BUF_SIZE {
-                                buf[j] = j as u32;
-                            }
-                            tx.send(buf).unwrap();
+                s.spawn(|| {
+                    for _ in 0..NUM_MESSAGES {
+                        let mut buf = pool.get();
+                        for j in 0..BUF_SIZE {
+                            buf[j] = j as u32;
                         }
+                        tx.send(buf).unwrap();
                     }
                 });
 
