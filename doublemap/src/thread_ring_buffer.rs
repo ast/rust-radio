@@ -1,12 +1,11 @@
 use super::Doublemap;
 use parking_lot::{Condvar, Mutex};
 use std::sync::Arc;
+use thiserror::Error;
 
-pub struct ProduceError;
-pub struct ConsumeError;
-
-unsafe impl<T: Send> Send for RingBuffer<T> {}
-unsafe impl<T: Sync> Sync for RingBuffer<T> {}
+#[derive(Debug, Error)]
+#[error("other side of ring buffer was dropped")]
+pub struct Disconnected;
 
 // Inner ring buffer
 #[derive(Debug)]
@@ -104,7 +103,7 @@ impl<T: Copy> Producer<T> {
         buffer.is_full()
     }
 
-    pub fn produce<F>(&self, f: F)
+    pub fn produce<F>(&self, f: F) -> Result<(), Disconnected>
     where
         F: FnOnce(&mut [T]) -> usize,
     {
@@ -112,7 +111,14 @@ impl<T: Copy> Producer<T> {
         let Shared { buffer, condvar } = &*self.shared;
         let mut buffer = buffer.lock();
 
-        condvar.wait_while(&mut buffer, |b| b.free() < self.required);
+        // Wait until we have enough free space or the consumer is gone
+        condvar.wait_while(&mut buffer, |b| {
+            b.free() < self.required && b.consumer_alive
+        });
+
+        if !buffer.consumer_alive {
+            return Err(Disconnected);
+        }
 
         let produced = {
             let write_slice = buffer.as_mut_slice();
@@ -126,6 +132,8 @@ impl<T: Copy> Producer<T> {
             // If the length is enough for the consumer's requirement, notify
             condvar.notify_one();
         }
+
+        Ok(())
     }
 }
 
@@ -154,7 +162,7 @@ impl<T: Copy> Consumer<T> {
 
     /// Consume data by giving a slice of readable items to the closure.
     /// The closure returns how many items it actually consumed.
-    pub fn consume<F>(&self, f: F)
+    pub fn consume<F>(&self, f: F) -> Result<(), Disconnected>
     where
         F: FnOnce(&[T]) -> usize,
     {
@@ -162,7 +170,15 @@ impl<T: Copy> Consumer<T> {
         let Shared { buffer, condvar } = &*self.shared;
         let mut buffer = buffer.lock();
 
-        condvar.wait_while(&mut buffer, |b| b.len() < self.required);
+        // Wait until we have enough data or the producer is gone
+        condvar.wait_while(&mut buffer, |b| {
+            b.len() < self.required && b.producer_alive
+        });
+
+        // If the producer is gone and there's not enough data, signal disconnection
+        if !buffer.producer_alive && buffer.len() < self.required {
+            return Err(Disconnected);
+        }
 
         let consumed = {
             let read_slice = buffer.as_slice();
@@ -171,12 +187,12 @@ impl<T: Copy> Consumer<T> {
 
         buffer.consume(consumed); // Advance read position
 
-        // Notify any waiting producers
-
         if buffer.free() >= self.producer_required {
             // If the free space is enough for the producer's requirement, notify
             condvar.notify_one();
         }
+
+        Ok(())
     }
 }
 
@@ -235,33 +251,160 @@ mod tests {
 
             for _ in 0..test_rounds {
                 // Produce some data
-                producer.produce(|slice| {
-                    // Fill the slice with some data
+                producer
+                    .produce(|slice| {
+                        // Fill the slice with some data
 
-                    (0..slice.len()).for_each(|i| {
-                        slice[i] = (i % 256) as u8;
-                    });
+                        (0..slice.len()).for_each(|i| {
+                            slice[i] = (i % 256) as u8;
+                        });
 
-                    slice.len() // return how many items were produced
-                });
+                        slice.len() // return how many items were produced
+                    })
+                    .unwrap();
             }
         });
 
         // Consumer thread
         let consumer_thread = std::thread::spawn(move || {
             for _ in 0..test_rounds {
-                consumer.consume(|slice| {
-                    // Consume the slice and check the data
-                    (0..slice.len()).for_each(|i| {
-                        assert_eq!(slice[i], (i % 256) as u8);
-                    });
-                    slice.len() // return how many items were consumed
-                });
+                consumer
+                    .consume(|slice| {
+                        // Consume the slice and check the data
+                        (0..slice.len()).for_each(|i| {
+                            assert_eq!(slice[i], (i % 256) as u8);
+                        });
+                        slice.len() // return how many items were consumed
+                    })
+                    .unwrap();
             }
         });
 
         // join
         producer_thread.join().unwrap();
         consumer_thread.join().unwrap();
+    }
+
+    #[test]
+    fn test_drop_producer_unblocks_consumer() {
+        let (producer, consumer) = ring_buffer_pair::<u8>(64, 64);
+
+        let handle = std::thread::spawn(move || {
+            // Consumer waits for data that will never come
+            let result = consumer.consume(|slice| slice.len());
+            assert!(result.is_err(), "should return Disconnected");
+        });
+
+        // Drop the producer — consumer should wake up and get Err
+        drop(producer);
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn test_drop_consumer_unblocks_producer() {
+        let (producer, consumer) = ring_buffer_pair::<u8>(64, 64);
+
+        // Fill the buffer completely so producer will block
+        let cap = {
+            let buf = producer.shared.buffer.lock();
+            buf.capacity()
+        };
+
+        // Fill to capacity
+        producer
+            .produce(|slice| {
+                let n = slice.len().min(cap);
+                for i in 0..n {
+                    slice[i] = 0;
+                }
+                n
+            })
+            .unwrap();
+
+        let handle = std::thread::spawn(move || {
+            // Producer tries to write into a full buffer
+            let result = producer.produce(|slice| {
+                slice[0] = 42;
+                1
+            });
+            assert!(result.is_err(), "should return Disconnected");
+        });
+
+        // Drop the consumer — producer should wake up and get Err
+        drop(consumer);
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn test_zst_rejected() {
+        use crate::doublemap::DoublemapError;
+        let result = super::super::Doublemap::<()>::new(1024);
+        assert!(matches!(result, Err(DoublemapError::ZeroSizedType)));
+    }
+
+    #[test]
+    fn test_wraparound_correctness() {
+        // Verify data integrity across many wraparound cycles
+        let chunk = 137; // odd size to stress wraparound
+        let rounds = 500;
+
+        let (producer, consumer) = ring_buffer_pair::<u32>(chunk, chunk);
+
+        let producer_thread = std::thread::spawn(move || {
+            for round in 0..rounds {
+                producer
+                    .produce(|slice| {
+                        for i in 0..chunk {
+                            slice[i] = (round * chunk + i) as u32;
+                        }
+                        chunk
+                    })
+                    .unwrap();
+            }
+        });
+
+        let consumer_thread = std::thread::spawn(move || {
+            let mut expected = 0u32;
+            for _ in 0..rounds {
+                consumer
+                    .consume(|slice| {
+                        for i in 0..chunk {
+                            assert_eq!(
+                                slice[i], expected,
+                                "mismatch at expected={expected}, got={}",
+                                slice[i]
+                            );
+                            expected += 1;
+                        }
+                        chunk
+                    })
+                    .unwrap();
+            }
+        });
+
+        producer_thread.join().unwrap();
+        consumer_thread.join().unwrap();
+    }
+
+    #[test]
+    fn test_mirroring_across_boundary() {
+        // Write at the end of the first half and verify it's visible
+        // at the start of the second half (the core doublemap property)
+        use crate::Doublemap;
+
+        let mut map = Doublemap::<u64>::new(512).unwrap();
+        let cap = map.capacity();
+        let slice = map.as_mut_slice();
+
+        // Write a sentinel at the last element of the first half
+        let sentinel = 0xDEAD_BEEF_CAFE_BABEu64;
+        slice[cap - 1] = sentinel;
+
+        // It should appear at the mirror position
+        assert_eq!(slice[cap - 1 + cap], sentinel);
+
+        // Write at the start of the first half
+        slice[0] = 0x1234;
+        assert_eq!(slice[cap], 0x1234);
     }
 }

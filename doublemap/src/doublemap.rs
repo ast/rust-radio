@@ -7,11 +7,10 @@ use std::ptr;
 use std::ptr::NonNull;
 use thiserror::Error;
 
-// todo: asfd?
 use crate::memfd::Memfd;
 
 #[derive(Debug, Error)]
-pub enum DoublemapeError {
+pub enum DoublemapError {
     #[error("Size of T cannot be zero")]
     ZeroSizedType,
     #[error("Overflow")]
@@ -38,17 +37,17 @@ fn pagesize() -> usize {
 /// allocated 2x the requested capacity x size_of(T) rounded up to the
 /// nearest page size.
 impl<T: Copy> Doublemap<T> {
-    pub fn new(capacity: usize) -> Result<Self, DoublemapeError> {
+    pub fn new(capacity: usize) -> Result<Self, DoublemapError> {
         // Size of T
         let size_of_t = std::mem::size_of::<T>();
         if size_of_t == 0 {
-            return Err(DoublemapeError::ZeroSizedType);
+            return Err(DoublemapError::ZeroSizedType);
         }
 
         // Calculate the total capacity needed in bytes
         let capacity = capacity
             .checked_mul(size_of_t)
-            .ok_or(DoublemapeError::Overflow)?;
+            .ok_or(DoublemapError::Overflow)?;
 
         // Get system page size
         let page_size = pagesize();
@@ -74,7 +73,7 @@ impl<T: Copy> Doublemap<T> {
 
         if reserved == MAP_FAILED {
             // unsafe { close(mem_fd) };
-            return Err(DoublemapeError::IO(std::io::Error::last_os_error()));
+            return Err(DoublemapError::IO(std::io::Error::last_os_error()));
         }
 
         // First mapping
@@ -94,7 +93,7 @@ impl<T: Copy> Doublemap<T> {
             unsafe {
                 munmap(reserved, total_size);
             }
-            return Err(DoublemapeError::IO(std::io::Error::last_os_error()));
+            return Err(DoublemapError::IO(std::io::Error::last_os_error()));
         }
 
         // Second mapping (mirror)
@@ -110,12 +109,11 @@ impl<T: Copy> Doublemap<T> {
             )
         };
         if buffer_2 != addr_hint_2 || buffer_2 == MAP_FAILED {
+            // buffer_1 == reserved (MAP_FIXED replaced it), so one unmap covers both halves
             unsafe {
-                munmap(buffer_1, aligned_capacity);
                 munmap(reserved, total_size);
             }
-
-            return Err(DoublemapeError::IO(std::io::Error::last_os_error()));
+            return Err(DoublemapError::IO(std::io::Error::last_os_error()));
         }
 
         Ok(Self {
@@ -151,6 +149,11 @@ impl<T: Copy> Doublemap<T> {
         self.capacity
     }
 }
+
+// SAFETY: Doublemap owns the mmap'd region exclusively (no aliasing).
+// It is safe to send/share if T is, just like Vec<T>.
+unsafe impl<T: Send> Send for Doublemap<T> {}
+unsafe impl<T: Sync> Sync for Doublemap<T> {}
 
 impl<T> Drop for Doublemap<T> {
     fn drop(&mut self) {

@@ -42,7 +42,7 @@ impl SpectrumServer {
             println!("Starting consumer thread with FFT length: {}", fft_len);
 
             loop {
-                consumer.consume(|input| {
+                let result = consumer.consume(|input| {
                     println!("Got {} samples", input.len());
 
                     let mut pds = pool.get();
@@ -62,6 +62,10 @@ impl SpectrumServer {
                     // Consume the input buffer, which is at least fft_len long
                     fft_len
                 });
+                if result.is_err() {
+                    eprintln!("Producer disconnected, stopping FFT worker");
+                    break;
+                }
             }
         });
 
@@ -79,7 +83,7 @@ impl SpectrumServer {
     }
 
     pub fn process(&self, samples: &[Complex32]) {
-        self.producer.produce(|slice| {
+        let _ = self.producer.produce(|slice| {
             slice[..samples.len()].copy_from_slice(samples);
             samples.len()
         });

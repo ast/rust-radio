@@ -19,28 +19,32 @@ fn bench_threaded_ring_buffer(c: &mut Criterion) {
         b.iter(|| {
             thread::scope(|s| {
                 // Producer thread
-                let prod = s.spawn(|| {
+                s.spawn(|| {
                     let mut index = 0;
                     while index < input.len() {
-                        producer.produce(|buf| {
-                            let len = buf.len().min(CHUNK_SIZE).min(input.len() - index);
-                            buf[..len].copy_from_slice(&input[index..index + len]);
-                            index += len;
-                            len
-                        });
+                        producer
+                            .produce(|buf| {
+                                let len = buf.len().min(CHUNK_SIZE).min(input.len() - index);
+                                buf[..len].copy_from_slice(&input[index..index + len]);
+                                index += len;
+                                len
+                            })
+                            .unwrap();
                     }
                 });
 
                 // Consumer thread
-                let cons = s.spawn(|| {
+                s.spawn(|| {
                     let mut received = 0;
                     while received < NUM_SAMPLES {
-                        consumer.consume(|buf| {
-                            let len = buf.len().min(CHUNK_SIZE).min(NUM_SAMPLES - received);
-                            black_box(&buf[..len]); // simulate processing
-                            received += len;
-                            len
-                        });
+                        consumer
+                            .consume(|buf| {
+                                let len = buf.len().min(CHUNK_SIZE).min(NUM_SAMPLES - received);
+                                black_box(&buf[..len]); // simulate processing
+                                received += len;
+                                len
+                            })
+                            .unwrap();
                     }
                 });
             });
