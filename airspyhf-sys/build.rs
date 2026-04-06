@@ -4,6 +4,7 @@ use std::path::PathBuf;
 fn main() {
     // Link the AirspyHF library
     println!("cargo:rustc-link-lib=airspyhf");
+    println!("cargo:rustc-link-search=native=/usr/local/lib");
 
     let bindings = bindgen::Builder::default()
         .header("wrapper.h")

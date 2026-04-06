@@ -1,3 +1,62 @@
-* SDR in rust
+* rust-radio — SDR and Radio Control in Rust
 
-Copyright 2025 Albin Stigö SM6WJM/AD8KM
+Copyright 2025-2026 Albin Stigö SM6WJM/AD8KM
+
+A Rust workspace for software-defined radio reception, real-time audio streaming, and amateur radio control.
+
+** Workspace Crates
+
+*** Signal Processing
+- *airspyhf-sys* — Raw FFI bindings to =libairspyhf= (generated with =bindgen=)
+- *airspyhf* — Safe Rust wrapper providing callback-based IQ streaming (=Complex32=)
+- *signals* — Complex oscillators (standard, fast, Fs/4-optimized), file source, noise source
+- *filters* — FIR filters and decimation chains for =Complex32= with pre-computed FM kernels
+- *doublemap* — Lock-free ring buffer via =memfd_create= + double memory mapping
+- *pool* — Allocation-free buffer pools for real-time paths
+- *spectrum* — FFT-based spectrum analyzer (windowing + power density)
+- *receiver* — Main SDR receiver binary: streams IQ from AirspyHF, serves spectrum over a Unix socket
+
+*** Audio Streaming
+- *rtp* — RTP header construction for network audio
+- *sideband* — Captures audio via =cpal=, encodes with Opus, streams as RTP/UDP (see =sideband/README.org=)
+
+*** Radio Control (Icom CI-V)
+- *sidebridge* — Async =RadioTrait= abstraction with CI-V packet types
+- *serial-bridge* — TCP-to-serial bridge for Icom IC-705 with =nom=-based CI-V parser and =tokio-util= codec (see =serial-bridge/README.org=)
+
+** Building
+
+#+begin_src bash
+  cargo build                 # build entire workspace
+  cargo test                  # run all tests (hardware tests are #[ignore])
+  cargo bench -p filters      # run benchmarks for a crate
+#+end_src
+
+=airspyhf-sys= requires =libairspyhf= headers and library installed on the system.
+
+** Cross-compiling for Raspberry Pi
+
+#+begin_src bash
+  cargo install cross --git https://github.com/cross-rs/cross
+  # You have to docker login to ghcr.io or it will fail
+  cross build --target aarch64-unknown-linux-gnu --release
+#+end_src
+
+A =Justfile= is provided for common workflows:
+
+#+begin_src bash
+  cargo install just
+
+  just build-pi              # cross-build sideband for Pi
+  just upload                # build + scp to remote "shack"
+  just deploy                # build + upload + run on Pi
+  just build-bridge-pi       # cross-build serial-bridge for Pi
+  just upload-bridge-pi      # scp serial-bridge to Pi
+#+end_src
+
+** Dependencies
+
+- Rust 2024 edition
+- =libairspyhf= (for =airspyhf-sys=)
+- =libopus-dev=, =libasound2-dev= (for cross-compilation, see =Cross.toml=)
+- =gstreamer= (for receiving/testing RTP audio streams, see =sideband/README.org=)

@@ -1,0 +1,48 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Build Commands
+
+```bash
+cargo build                          # build entire workspace
+cargo build -p filters               # build a single crate
+cargo test                           # run all tests (some airspyhf tests need hardware, marked #[ignore])
+cargo test -p signals                # test a single crate
+cargo test test_oscillator           # run a single test by name
+cargo bench -p filters               # run benchmarks for a crate
+cross build --target aarch64-unknown-linux-gnu  # cross-compile for Raspberry Pi 4/5
+```
+
+## Architecture
+
+This is a Rust workspace for software-defined radio (SDR) and amateur radio control, authored by SM6WJM.
+
+### Signal processing pipeline (SDR receiver path)
+
+- **airspyhf-sys** — Raw FFI bindings to `libairspyhf` (generated via `bindgen`, requires the C library installed)
+- **airspyhf** — Safe Rust wrapper around `airspyhf-sys`. Provides `Device` with callback-based IQ sample streaming (`Complex32`)
+- **signals** — Signal sources: complex oscillators (standard, fast/SIMD-friendly, Fs/4-optimized), file source, noise source. All implement `Iterator<Item = Complex32>`
+- **filters** — FIR filters and decimation chains operating on `Complex32`. Includes naive, optimized, and fast (SIMD-ready) implementations with pre-computed kernels for FM demodulation
+- **doublemap** — Lock-free ring buffer using Linux `memfd_create` + double memory mapping for zero-copy producer/consumer IPC
+- **pool** — Buffer pool and channel-based buffer pool for allocation-free real-time paths
+- **spectrum** — FFT-based spectrum analyzer (windowing + power density), used by the receiver's spectrum server
+- **receiver** — Main SDR receiver binary. Streams IQ from AirspyHF, computes spectrum via `doublemap` ring buffer, serves spectrum data over a Unix domain socket (`/tmp/echo.sock`)
+
+### Audio streaming
+
+- **rtp** — RTP header construction for network audio transport
+- **sideband** — Captures audio via `cpal`, encodes with Opus, streams as RTP/UDP packets to a remote address
+
+### Radio control (Icom CI-V)
+
+- **sidebridge** — Async radio control trait (`RadioTrait`) with types for mode, state, and spectrum. Defines the `RadioError` hierarchy. Contains an Icom CI-V packet parser
+- **serial-bridge** — TCP-to-serial bridge for Icom IC-705 CI-V control. Includes a `tokio-util` codec (`CivCodec`), nom-based CI-V frame parser, and command definitions. The bridge binary proxies bidirectional CI-V traffic; the client binary connects over TCP
+
+## Key Patterns
+
+- Complex IQ samples use `num_complex::Complex32` throughout
+- Real-time audio/sample paths avoid allocation using `pool::BufferPool` and `doublemap` ring buffers
+- Async crates (`serial-bridge`, `sidebridge`) use `tokio`; signal processing crates are synchronous
+- `airspyhf-sys` requires `libairspyhf` headers and library at build time; hardware-dependent tests are `#[ignore]`
+- The `serial-bridge` CI-V parser uses `nom` for frame parsing
