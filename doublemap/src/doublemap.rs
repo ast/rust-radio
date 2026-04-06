@@ -1,13 +1,13 @@
-use libc::{
-    MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE,
-    mmap, munmap, sysconf,
-};
+use nix::sys::memfd::{MFdFlags, memfd_create};
+use nix::sys::mman::{self, MapFlags, ProtFlags, munmap};
+use nix::unistd::ftruncate;
 
-use std::ptr;
+use std::ffi::CStr;
+use std::fmt;
+use std::num::NonZeroUsize;
+use std::os::fd::OwnedFd;
 use std::ptr::NonNull;
 use thiserror::Error;
-
-use crate::memfd::Memfd;
 
 #[derive(Debug, Error)]
 pub enum DoublemapError {
@@ -15,112 +15,80 @@ pub enum DoublemapError {
     ZeroSizedType,
     #[error("Overflow")]
     Overflow,
-    #[error("memfd: {0}")]
-    IO(#[from] std::io::Error),
+    #[error("{0}")]
+    Nix(#[from] nix::Error),
 }
 
-#[derive(Debug)]
 pub struct Doublemap<T> {
     ptr: NonNull<T>,
-    // len of one segment, we map 2x len to get mirror
+    // len of one segment in elements, we map 2x to get the mirror
     capacity: usize,
-    _mem_fd: Memfd,
+    // OwnedFd closes on drop — keeps the memfd alive as long as the mappings exist
+    _fd: OwnedFd,
 }
 
-// Helper function to get the system page size
-fn pagesize() -> usize {
-    // Get system page size
-    unsafe { sysconf(libc::_SC_PAGESIZE) as usize }
+impl<T> fmt::Debug for Doublemap<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Doublemap")
+            .field("ptr", &self.ptr)
+            .field("capacity", &self.capacity)
+            .finish()
+    }
 }
 
-/// Capacity is in number of elements, not bytes We will need to
-/// allocated 2x the requested capacity x size_of(T) rounded up to the
-/// nearest page size.
+/// Capacity is in number of elements, not bytes. The actual capacity
+/// is rounded up to the nearest page size.
 impl<T: Copy> Doublemap<T> {
     pub fn new(capacity: usize) -> Result<Self, DoublemapError> {
-        // Size of T
         let size_of_t = std::mem::size_of::<T>();
         if size_of_t == 0 {
             return Err(DoublemapError::ZeroSizedType);
         }
 
-        // Calculate the total capacity needed in bytes
-        let capacity = capacity
+        let capacity_bytes = capacity
             .checked_mul(size_of_t)
             .ok_or(DoublemapError::Overflow)?;
 
-        // Get system page size
-        let page_size = pagesize();
+        let page_size = unsafe { nix::libc::sysconf(nix::libc::_SC_PAGESIZE) } as usize;
 
-        // Round up requested capacity to the nearest page size
-        let aligned_capacity = capacity.div_ceil(page_size) * page_size;
+        // Round up to page boundary
+        let aligned = capacity_bytes.div_ceil(page_size) * page_size;
+        let total = NonZeroUsize::new(aligned * 2).ok_or(DoublemapError::Overflow)?;
+        let half = NonZeroUsize::new(aligned).ok_or(DoublemapError::Overflow)?;
 
-        let mem_fd = Memfd::new("rust-radio", aligned_capacity)?;
+        // Create anonymous file and size it
+        let name = CStr::from_bytes_with_nul(b"doublemap\0").unwrap();
+        let fd = memfd_create(name, MFdFlags::empty())?;
+        ftruncate(&fd, aligned as i64)?;
 
-        // Reserve 2x space with PROT_NONE
-        let total_size = aligned_capacity * 2;
-
+        // Reserve contiguous virtual address space (PROT_NONE = no access yet)
         let reserved = unsafe {
-            mmap(
-                ptr::null_mut(),
-                total_size,
-                PROT_NONE,
-                MAP_PRIVATE | MAP_ANON,
-                -1,
-                0,
-            )
+            mman::mmap_anonymous(None, total, ProtFlags::PROT_NONE, MapFlags::MAP_PRIVATE)?
         };
 
-        if reserved == MAP_FAILED {
-            // unsafe { close(mem_fd) };
-            return Err(DoublemapError::IO(std::io::Error::last_os_error()));
-        }
+        let rw = ProtFlags::PROT_READ | ProtFlags::PROT_WRITE;
+        let shared_fixed = MapFlags::MAP_SHARED | MapFlags::MAP_FIXED;
 
-        // First mapping
-        let addr_hint_1 = reserved;
+        // Convert NonNull<c_void> to NonZeroUsize for mmap's addr parameter
+        let reserved_addr = NonZeroUsize::new(reserved.as_ptr() as usize).unwrap();
 
-        let buffer_1 = unsafe {
-            mmap(
-                addr_hint_1,
-                aligned_capacity,
-                PROT_READ | PROT_WRITE,
-                MAP_SHARED | MAP_FIXED,
-                mem_fd.fd(),
-                0,
-            )
-        };
-        if buffer_1 != addr_hint_1 || buffer_1 == MAP_FAILED {
-            unsafe {
-                munmap(reserved, total_size);
-            }
-            return Err(DoublemapError::IO(std::io::Error::last_os_error()));
-        }
+        // First half: map the memfd at the start of the reserved region
+        let first = unsafe { mman::mmap(Some(reserved_addr), half, rw, shared_fixed, &fd, 0)? };
 
-        // Second mapping (mirror)
-        let addr_hint_2 = (buffer_1 as usize + aligned_capacity) as *mut libc::c_void;
-        let buffer_2 = unsafe {
-            mmap(
-                addr_hint_2,
-                aligned_capacity,
-                PROT_READ | PROT_WRITE,
-                MAP_SHARED | MAP_FIXED,
-                mem_fd.fd(),
-                0,
-            )
-        };
-        if buffer_2 != addr_hint_2 || buffer_2 == MAP_FAILED {
-            // buffer_1 == reserved (MAP_FIXED replaced it), so one unmap covers both halves
-            unsafe {
-                munmap(reserved, total_size);
-            }
-            return Err(DoublemapError::IO(std::io::Error::last_os_error()));
+        // Second half (mirror): map the same memfd right after the first half
+        let mirror_addr = NonZeroUsize::new(first.as_ptr() as usize + aligned).unwrap();
+        let second = unsafe { mman::mmap(Some(mirror_addr), half, rw, shared_fixed, &fd, 0) };
+
+        if let Err(e) = second {
+            // Clean up the entire reserved region on failure
+            unsafe { munmap(reserved, aligned * 2) }?;
+            return Err(DoublemapError::Nix(e));
         }
 
         Ok(Self {
-            ptr: NonNull::new(buffer_1 as *mut T)
-                .expect("mmap returned null pointer, which should not happen"),
-            capacity: aligned_capacity / size_of_t,
-            _mem_fd: mem_fd,
+            ptr: first.cast(),
+            capacity: aligned / size_of_t,
+            _fd: fd,
         })
     }
 
@@ -129,7 +97,6 @@ impl<T: Copy> Doublemap<T> {
         self.ptr.as_ptr()
     }
 
-    // as_mut_ptr
     #[inline(always)]
     pub fn as_mut_ptr(&mut self) -> *mut T {
         self.ptr.as_ptr()
@@ -158,16 +125,12 @@ unsafe impl<T: Sync> Sync for Doublemap<T> {}
 impl<T> Drop for Doublemap<T> {
     fn drop(&mut self) {
         unsafe {
-            let size_of_t = std::mem::size_of::<T>();
-            munmap(
-                self.ptr.as_ptr() as *mut libc::c_void,
-                self.capacity * size_of_t * 2,
-            );
+            let size_bytes = self.capacity * std::mem::size_of::<T>() * 2;
+            let _ = munmap(self.ptr.cast(), size_bytes);
         }
     }
 }
 
-// Test
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -202,21 +165,17 @@ mod tests {
         }
     }
 
-    // Test i16
     #[test]
     fn test_complex_i16() {
         let mut map = Doublemap::<i16>::new(1024).unwrap();
         let slice = map.as_mut_slice();
 
-        // Check len
         assert_eq!(slice.len(), 4096);
 
-        // Fill the first half with complex numbers
         for i in 0..slice.len() / 2 {
             slice[i] = (i as i16) * 2;
         }
 
-        // Check that the second half is the same as the first half
         for i in 0..slice.len() / 2 {
             assert_eq!(slice[i], slice[i + slice.len() / 2]);
         }
@@ -227,15 +186,12 @@ mod tests {
         let mut map = Doublemap::<Complex32>::new(2048).unwrap();
         let slice = map.as_mut_slice();
 
-        // Check len
         assert_eq!(slice.len(), 4096);
 
-        // Fill the first half with complex numbers
         for i in 0..slice.len() / 2 {
             slice[i] = Complex32::new(i as f32, (i + 1) as f32);
         }
 
-        // Check that the second half is the same as the first half
         for i in 0..slice.len() / 2 {
             assert_eq!(slice[i], slice[i + slice.len() / 2]);
         }

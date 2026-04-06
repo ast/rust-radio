@@ -1,6 +1,4 @@
 pub mod doublemap;
-pub mod memfd;
-
 pub mod thread_ring_buffer;
 
 pub use doublemap::Doublemap;

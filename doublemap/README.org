@@ -5,11 +5,79 @@ Lock-free ring buffer built on a double memory-mapped region using Linux =memfd_
 - =Doublemap<T>= — the underlying double-mapped buffer (Linux-only)
 - =Producer<T>= / =Consumer<T>= — thread-safe ring buffer pair with condvar-based blocking
 
+** Why double mapping?
+
+A normal ring buffer has a wraparound problem: when the read or write position is near the end, a contiguous slice would extend past the buffer boundary. The usual fix is to split into two copies. Double mapping eliminates this — the same physical memory appears twice in virtual address space, so =slice[capacity - 10 .. capacity + 50]= is valid and contiguous.
+
+#+begin_example
+  Virtual address space:
+  ┌──────────────┬──────────────┐
+  │  First half  │ Second half  │  ← two mappings
+  │  (pages 0-N) │ (pages 0-N)  │  ← same physical pages
+  └──────────────┴──────────────┘
+#+end_example
+
 ** Usage
 
+*** Low-level: =Doublemap<T>=
+
+Direct access to the double-mapped buffer. Writes to the first half are instantly visible in the second half.
+
 #+begin_src rust
-  let (producer, consumer) = ring_buffer_pair::<Complex32>(2048, 32768);
+  use doublemap::Doublemap;
+
+  let mut map = Doublemap::<u8>::new(4096).unwrap();
+  let slice = map.as_mut_slice(); // length = capacity * 2
+
+  // Write near the end of the first half
+  slice[map.capacity() - 1] = 42;
+
+  // Instantly visible in the mirror
+  assert_eq!(slice[map.capacity() - 1 + map.capacity()], 42);
 #+end_src
+
+*** Producer/Consumer ring buffer
+
+=ring_buffer_pair= creates a matched =Producer= / =Consumer= that block until their required number of elements are available. Each side gets a contiguous slice to work with, even across the wraparound boundary.
+
+#+begin_src rust
+  use doublemap::{ring_buffer_pair, Producer, Consumer};
+  use num_complex::Complex32;
+
+  // Producer needs 2048 free slots to proceed,
+  // consumer needs 32768 filled slots to proceed.
+  let (producer, consumer) = ring_buffer_pair::<Complex32>(2048, 32768);
+
+  // Producer thread
+  std::thread::spawn(move || {
+      loop {
+          match producer.produce(|buf| {
+              // buf is a &mut [Complex32] with at least 2048 elements
+              fill_samples(buf);
+              buf.len()
+          }) {
+              Ok(()) => {},
+              Err(_) => break, // consumer was dropped
+          }
+      }
+  });
+
+  // Consumer thread
+  std::thread::spawn(move || {
+      loop {
+          match consumer.consume(|buf| {
+              // buf is a &[Complex32] with at least 32768 elements
+              process_fft(buf);
+              32768 // consume exactly one FFT frame
+          }) {
+              Ok(()) => {},
+              Err(_) => break, // producer was dropped
+          }
+      }
+  });
+#+end_src
+
+Both =produce= and =consume= return =Result<(), Disconnected>= — when one side is dropped, the other side unblocks and gets =Err= instead of deadlocking.
 
 ** Benchmarks
 
