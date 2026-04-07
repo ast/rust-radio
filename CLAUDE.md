@@ -36,13 +36,18 @@ This is a Rust workspace for software-defined radio (SDR) and amateur radio cont
 
 ### Radio control (Icom CI-V)
 
-- **sidebridge** — Async radio control abstraction. Modular trait hierarchy: `Radio` (frequency/mode/PTT), `RadioInfo` (capabilities), `RadioMeter` (S-meter/SWR/ALC), `RadioScope` (spectrum). Includes Icom CI-V parser/codec (`nom`-based), and `civ-bridge`/`civ-client` binaries for TCP-to-serial bridging
+- **sidebridge** — Async radio control abstraction. Modular trait hierarchy: `Radio` (frequency/mode/PTT), `RadioInfo` (capabilities), `RadioMeter` (S-meter/SWR/ALC), `RadioScope` (spectrum). Includes Icom CI-V parser/codec (`nom`-based), `Transport` (URL-based serial/TCP connectivity), and `serial-bridge`/`civ-client`/`civ-poll` binaries
+
+## Style
+
+- Keep types, enums, and impls in their own files — one concept per file, named after the type (e.g. `transport.rs` for `Transport`)
+- Use `foo.rs` + `foo/` for submodules, not `mod.rs`
 
 ## Key Patterns
 
 - Complex IQ samples use `num_complex::Complex32` throughout
 - Real-time audio/sample paths avoid allocation using `pool::BufferPool` and `doublemap` ring buffers
-- Async crates (`serial-bridge`, `sidebridge`) use `tokio`; signal processing crates are synchronous
+- Async crates (`sidebridge`) use `tokio`; signal processing crates are synchronous
 - `airspyhf-sys` requires `libairspyhf` headers and library at build time; hardware-dependent tests are `#[ignore]`
 - POSIX syscalls (mmap, memfd_create, ftruncate) use the `nix` crate for safe wrappers, not raw `libc`
 - The CI-V parser in `sidebridge::icom_civ` uses `nom` for frame parsing

@@ -33,13 +33,13 @@ The =icom_civ= module provides a complete CI-V protocol stack:
 
 In the examples below, =shack= is used as a hostname for the remote machine (e.g. a Raspberry Pi reachable via tailscale or SSH config).
 
-*** civ-bridge
+*** serial-bridge
 
-Transparent TCP-to-serial bridge. Run on a Raspberry Pi connected to the radio, access remotely via SSH port forwarding or directly over tailscale.
+Transparent TCP-to-serial bridge. Works with any serial protocol (Icom CI-V, Yaesu CAT, etc). Run on a machine connected to the radio, access remotely via SSH port forwarding or directly over tailscale.
 
 #+begin_src bash
   # On the Pi (or local machine)
-  cargo run -p sidebridge --bin civ-bridge -- --serial /dev/ic-705a --listen 0.0.0.0:9000
+  serial-bridge --serial /dev/ic-705a --listen 0.0.0.0:9000
 
   # From remote, via SSH tunnel
   ssh -L 9000:localhost:9000 shack
@@ -50,7 +50,44 @@ Transparent TCP-to-serial bridge. Run on a Raspberry Pi connected to the radio, 
 Monitor and decode CI-V traffic from a bridge.
 
 #+begin_src bash
-  cargo run -p sidebridge --bin civ-client -- shack:9000
+  civ-client shack:9000
+#+end_src
+
+*** civ-poll
+
+Poll frequency and S-meter from an Icom radio via CI-V. Connects directly over serial or remotely via TCP through serial-bridge.
+
+#+begin_src bash
+  # Direct serial connection
+  civ-poll serial:///dev/ic-705a
+
+  # With custom baud rate
+  civ-poll serial:///dev/ic-705a?baud=9600
+
+  # Via serial-bridge over TCP
+  civ-poll tcp://shack:9000
+#+end_src
+
+*** Cross-compile and run via SSH
+
+The binaries can be cross-compiled for a Raspberry Pi and executed remotely:
+
+#+begin_src bash
+  # Cross-compile for aarch64 (Pi 4/5)
+  cross build -p sidebridge --release --target aarch64-unknown-linux-gnu
+
+  # Copy to the Pi
+  scp target/aarch64-unknown-linux-gnu/release/serial-bridge shack:/tmp/
+  scp target/aarch64-unknown-linux-gnu/release/civ-poll shack:/tmp/
+
+  # Start the bridge on the Pi
+  ssh shack '/tmp/serial-bridge --serial /dev/ic-705a --listen 0.0.0.0:9000'
+
+  # Poll from local machine via TCP
+  civ-poll tcp://shack:9000
+
+  # Or poll directly on the Pi
+  ssh shack '/tmp/civ-poll serial:///dev/ic-705a'
 #+end_src
 
 ** Usage (library)

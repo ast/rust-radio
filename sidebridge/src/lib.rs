@@ -3,6 +3,7 @@
 pub mod drivers;
 pub mod icom_civ;
 pub mod traits;
+pub mod transport;
 
 // Trait and type re-exports
 pub use traits::{
@@ -13,3 +14,4 @@ pub use traits::{
 pub use icom_civ::command::CivCommand;
 pub use icom_civ::command_code::CivCommandCode;
 pub use icom_civ::frame::CivFrame;
+pub use transport::Transport;

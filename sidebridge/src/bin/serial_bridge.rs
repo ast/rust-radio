@@ -8,7 +8,7 @@ use anyhow::Result;
 use clap::Parser;
 
 #[derive(Parser, Debug)]
-#[command(author, version, about = "Transparent TCP to Serial CI-V Bridge")]
+#[command(author, version, about = "Transparent TCP to serial bridge")]
 struct Args {
     /// Serial port path (e.g. /dev/ic-705a)
     #[arg(short, long, default_value = "/dev/ic-705a")]
@@ -30,7 +30,7 @@ async fn main() -> Result<()> {
     let mut serial_stream = tokio_serial::new(&args.serial, args.baud).open_native_async()?;
 
     let listener = TcpListener::bind(&args.listen).await?;
-    println!("CI-V bridge: {} → {}", args.serial, args.listen);
+    println!("Bridge: {} → {}", args.serial, args.listen);
 
     loop {
         let (mut tcp_stream, addr) = listener.accept().await?;
