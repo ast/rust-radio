@@ -4,7 +4,27 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.100"
 async-trait = "0.1.89"
+bytes = "1.11.1"
+clap = { version = "4.5.56", features = ["derive"] }
+futures = "0.3.31"
+nom = "8.0.0"
 serde = { version = "1.0.228", features = ["derive"] }
 thiserror = "2.0.18"
+tokio = { version = "1.49.0", features = ["full"] }
+tokio-serial = "5.4.5"
 tokio-stream = "0.1.18"
+tokio-util = { version = "0.7.18", features = ["codec"] }
+
+[[bin]]
+name = "civ-bridge"
+path = "src/bin/civ_bridge.rs"
+
+[[bin]]
+name = "civ-client"
+path = "src/bin/civ_client.rs"
+
+[[bin]]
+name = "civ-poll"
+path = "src/bin/civ_poll.rs"

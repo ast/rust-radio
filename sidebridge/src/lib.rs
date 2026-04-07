@@ -1,14 +1,15 @@
 // Copyright SM6WJM 2026
 
 pub mod drivers;
+pub mod icom_civ;
 pub mod traits;
 
-pub mod civ_packet;
+// Trait and type re-exports
+pub use traits::{
+    Capabilities, Mode, Radio, RadioError, RadioInfo, RadioMeter, RadioScope, Result, ScopeFrame,
+};
 
-// Re-export core types for convenience
-pub use crate::traits::{RadioMode, RadioState, RadioTrait, SpectrumFrame};
-
-// Prelude for quick imports
-pub mod prelude {
-    pub use crate::traits::RadioTrait as _;
-}
+// CI-V re-exports
+pub use icom_civ::command::CivCommand;
+pub use icom_civ::command_code::CivCommandCode;
+pub use icom_civ::frame::CivFrame;

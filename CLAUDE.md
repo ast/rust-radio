@@ -36,8 +36,7 @@ This is a Rust workspace for software-defined radio (SDR) and amateur radio cont
 
 ### Radio control (Icom CI-V)
 
-- **sidebridge** — Async radio control trait (`RadioTrait`) with types for mode, state, and spectrum. Defines the `RadioError` hierarchy. Contains an Icom CI-V packet parser
-- **serial-bridge** — TCP-to-serial bridge for Icom IC-705 CI-V control. Includes a `tokio-util` codec (`CivCodec`), nom-based CI-V frame parser, and command definitions. The bridge binary proxies bidirectional CI-V traffic; the client binary connects over TCP
+- **sidebridge** — Async radio control abstraction. Modular trait hierarchy: `Radio` (frequency/mode/PTT), `RadioInfo` (capabilities), `RadioMeter` (S-meter/SWR/ALC), `RadioScope` (spectrum). Includes Icom CI-V parser/codec (`nom`-based), and `civ-bridge`/`civ-client` binaries for TCP-to-serial bridging
 
 ## Key Patterns
 
@@ -46,4 +45,5 @@ This is a Rust workspace for software-defined radio (SDR) and amateur radio cont
 - Async crates (`serial-bridge`, `sidebridge`) use `tokio`; signal processing crates are synchronous
 - `airspyhf-sys` requires `libairspyhf` headers and library at build time; hardware-dependent tests are `#[ignore]`
 - POSIX syscalls (mmap, memfd_create, ftruncate) use the `nix` crate for safe wrappers, not raw `libc`
-- The `serial-bridge` CI-V parser uses `nom` for frame parsing
+- The CI-V parser in `sidebridge::icom_civ` uses `nom` for frame parsing
+- Radio protocol docs (CI-V, CAT PDFs) live in `sidebridge/docs/` — use `rga` (ripgrep-all) to search them: `rga "frequency" sidebridge/docs/`

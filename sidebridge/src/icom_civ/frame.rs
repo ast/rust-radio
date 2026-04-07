@@ -1,6 +1,6 @@
 // Copyright (c) SM6WJM 2026
 
-use super::commands::CivCommand;
+use super::command::CivCommand;
 
 #[derive(Debug)]
 pub struct CivFrame {

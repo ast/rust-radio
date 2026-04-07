@@ -1,106 +1,153 @@
+// Copyright SM6WJM 2026
+
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use thiserror::Error;
 use tokio_stream::Stream;
 
-/// Specific errors that can occur within the sidebridge ecosystem.
-/// Using thiserror allows library consumers to handle hardware issues programmatically.
+// ---------------------------------------------------------------------------
+// Error
+// ---------------------------------------------------------------------------
+
 #[derive(Error, Debug)]
 pub enum RadioError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("Hardware timeout: radio at {0} did not respond")]
+    #[error("Timeout: {0}")]
     Timeout(String),
 
     #[error("Protocol error: {0}")]
     Protocol(String),
 
-    #[error("The radio is currently busy or in a state that prevents this action")]
+    #[error("Radio busy")]
     Busy,
 
-    #[error("Feature not supported by this hardware: {0}")]
-    Unsupported(String),
+    #[error("Not supported: {0}")]
+    NotSupported(String),
 
-    #[error("Parse error: {0}")]
-    Parse(String),
-
-    #[error("Unknown error: {0}")]
-    Unknown(String),
+    #[error("Command rejected by radio")]
+    CommandFailed,
 }
 
-/// A specialized Result type for sidebridge operations.
 pub type Result<T> = std::result::Result<T, RadioError>;
 
-/// Core operating modes for amateur radio.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub enum RadioMode {
-    LSB,
-    USB,
-    AM,
-    FM,
-    CW,
-    RTTY,
-    CWR,
-    RTTYR,
-    DataLSB,
-    DataUSB,
-    DataFM,
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+/// Operating mode — covers modes common across Icom, Yaesu, and Kenwood.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Mode {
+    Lsb,
+    Usb,
+    Am,
+    Cw,
+    Rtty,
+    Fm,
+    CwR,
+    RttyR,
+    DataLsb,
+    DataUsb,
+    DataFm,
 }
 
-impl fmt::Display for RadioMode {
+impl fmt::Display for Mode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            Mode::Lsb => write!(f, "LSB"),
+            Mode::Usb => write!(f, "USB"),
+            Mode::Am => write!(f, "AM"),
+            Mode::Cw => write!(f, "CW"),
+            Mode::Rtty => write!(f, "RTTY"),
+            Mode::Fm => write!(f, "FM"),
+            Mode::CwR => write!(f, "CW-R"),
+            Mode::RttyR => write!(f, "RTTY-R"),
+            Mode::DataLsb => write!(f, "DATA-LSB"),
+            Mode::DataUsb => write!(f, "DATA-USB"),
+            Mode::DataFm => write!(f, "DATA-FM"),
+        }
     }
 }
 
-/// The snapshot of the radio's current configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RadioState {
-    pub frequency_hz: u64,
-    pub mode: RadioMode,
-    pub ptt_active: bool,
-    pub rf_power_percent: u8,
+/// Runtime capability discovery.
+#[derive(Debug, Clone)]
+pub struct Capabilities {
+    pub meter: bool,
+    pub scope: bool,
+    pub swr: bool,
+    pub memory_channels: bool,
 }
 
-/// Spectrum data frame for waterfall rendering.
+/// Spectrum scope frame for waterfall rendering.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SpectrumFrame {
-    pub center_freq_hz: u64,
+pub struct ScopeFrame {
+    pub center_hz: u64,
     pub span_hz: u32,
-    /// Amplitude bins (typically 0-255).
+    /// Amplitude bins (typically 0–255).
     pub bins: Vec<u8>,
 }
 
-/// The core interface that all radio drivers must implement.
-/// Following the `cpal` style, we name this with the `Trait` suffix.
+// ---------------------------------------------------------------------------
+// Core trait — every radio implements this
+// ---------------------------------------------------------------------------
+
+/// Core radio interface: frequency, mode, and PTT.
+///
+/// This is the minimum every radio must implement, from a modern IC-705
+/// to a vintage IC-781.
 #[async_trait]
-pub trait RadioTrait: Send + Sync {
-    /// A unique identifier for the specific radio instance.
+pub trait Radio: Send + Sync {
+    /// Unique identifier for this radio instance.
     fn id(&self) -> &str;
 
-    // --- Commands (The "Setters") ---
-
-    /// Set the VFO frequency.
     async fn set_frequency(&self, hz: u64) -> Result<()>;
+    async fn frequency(&self) -> Result<u64>;
 
-    /// Set the radio's operating mode.
-    async fn set_mode(&self, mode: RadioMode) -> Result<()>;
+    async fn set_mode(&self, mode: Mode) -> Result<()>;
+    async fn mode(&self) -> Result<Mode>;
 
-    /// Trigger PTT (Transmit/Receive).
     async fn set_ptt(&self, active: bool) -> Result<()>;
+    async fn ptt(&self) -> Result<bool>;
+}
 
-    // --- Telemetry (The "Objective-C" style Getters) ---
+// ---------------------------------------------------------------------------
+// Capability traits — implement what the hardware supports
+// ---------------------------------------------------------------------------
 
-    /// Retrieve the current state of the radio hardware.
-    async fn state(&self) -> Result<RadioState>;
+/// Static information about the radio and its capabilities.
+#[async_trait]
+pub trait RadioInfo: Radio {
+    /// Human-readable model name (e.g. "IC-705", "FT-891").
+    fn model(&self) -> &str;
 
-    /// A stream that emits new `RadioState` whenever hardware values change.
-    fn state_updates(&self) -> Box<dyn Stream<Item = RadioState> + Send + Unpin>;
+    /// Which optional capabilities this radio supports.
+    fn capabilities(&self) -> Capabilities;
+}
 
-    /// An optional stream for spectrum scope/waterfall data.
-    fn spectrum(&self) -> Option<Box<dyn Stream<Item = SpectrumFrame> + Send + Unpin>> {
-        None
-    }
+/// Metering: S-meter, SWR, ALC, RF power.
+#[async_trait]
+pub trait RadioMeter: Radio {
+    /// S-meter reading (0–255 raw, mapping is radio-specific).
+    async fn signal_strength(&self) -> Result<u8>;
+
+    /// Standing wave ratio (None if not supported or not transmitting).
+    async fn swr(&self) -> Result<Option<f32>>;
+
+    /// Automatic level control (None if not supported or not transmitting).
+    async fn alc(&self) -> Result<Option<f32>>;
+
+    /// Forward RF power in watts (None if not supported or not transmitting).
+    async fn rf_power(&self) -> Result<Option<f32>>;
+}
+
+/// Spectrum scope / waterfall (e.g. IC-705 bandscope).
+#[async_trait]
+pub trait RadioScope: Radio {
+    /// Request a single scope frame.
+    async fn scope_data(&self) -> Result<ScopeFrame>;
+
+    /// Continuous stream of scope frames.
+    fn scope_stream(&self) -> Box<dyn Stream<Item = ScopeFrame> + Send + Unpin>;
 }

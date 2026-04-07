@@ -1,12 +1,78 @@
 * sidebridge
 
-Async radio control abstraction layer. Defines the =RadioTrait= interface that all radio drivers must implement, along with shared types.
+Async radio control abstraction layer for amateur radio transceivers. Defines a modular trait hierarchy where drivers implement only the capabilities their hardware supports. Includes an Icom CI-V parser/codec and utility binaries for TCP-to-serial bridging.
+
+** Trait hierarchy
+
+| Trait | Purpose | IC-705 | FT-891 | IC-781 |
+|-------+---------+--------+--------+--------|
+| =Radio= | Frequency, mode, PTT | yes | yes | yes |
+| =RadioInfo= | Model name, capabilities | yes | yes | yes |
+| =RadioMeter= | S-meter, SWR, ALC, RF power | yes | yes | yes |
+| =RadioScope= | Spectrum/waterfall | yes | no | no |
 
 ** Core types
 
-- =RadioTrait= — async trait for frequency/mode/PTT control and state streaming
-- =RadioState= — snapshot of frequency, mode, PTT, and RF power
-- =RadioMode= — LSB, USB, AM, FM, CW, RTTY, and data modes
-- =SpectrumFrame= — spectrum scope data for waterfall rendering
-- =RadioError= — typed error hierarchy (IO, timeout, protocol, busy, unsupported)
-- =CivPacket= — Icom CI-V packet serialization (default addresses for IC-705)
+- =Radio= — async trait: =set_frequency= / =frequency=, =set_mode= / =mode=, =set_ptt= / =ptt=
+- =Mode= — LSB, USB, AM, CW, RTTY, FM, CW-R, RTTY-R, DATA-LSB, DATA-USB, DATA-FM
+- =Capabilities= — runtime feature discovery (meter, scope, SWR, memory channels)
+- =ScopeFrame= — spectrum scope data for waterfall rendering
+- =RadioError= — typed errors: IO, Timeout, Protocol, Busy, NotSupported, CommandFailed
+
+** Icom CI-V
+
+The =icom_civ= module provides a complete CI-V protocol stack:
+
+- =CivFrame= — parsed CI-V frame (dest, src, command)
+- =CivCommand= — decoded commands: frequency, mode, PTT, S-meter, waterfall, OK/NG
+- =CivCodec= — =tokio-util= =Decoder=/=Encoder= for framing CI-V over byte streams
+- =CivPacket= — stack-allocated packet for construction and serialization
+- =parser= — =nom=-based frame parser with BCD frequency encoding/decoding
+
+** Binaries
+
+In the examples below, =shack= is used as a hostname for the remote machine (e.g. a Raspberry Pi reachable via tailscale or SSH config).
+
+*** civ-bridge
+
+Transparent TCP-to-serial bridge. Run on a Raspberry Pi connected to the radio, access remotely via SSH port forwarding or directly over tailscale.
+
+#+begin_src bash
+  # On the Pi (or local machine)
+  cargo run -p sidebridge --bin civ-bridge -- --serial /dev/ic-705a --listen 0.0.0.0:9000
+
+  # From remote, via SSH tunnel
+  ssh -L 9000:localhost:9000 shack
+#+end_src
+
+*** civ-client
+
+Monitor and decode CI-V traffic from a bridge.
+
+#+begin_src bash
+  cargo run -p sidebridge --bin civ-client -- shack:9000
+#+end_src
+
+** Usage (library)
+
+#+begin_src rust
+  use sidebridge::{Radio, Mode, RadioMeter};
+
+  // Any radio driver that implements Radio
+  async fn tune_and_read(radio: &(impl Radio + RadioMeter)) -> sidebridge::Result<()> {
+      radio.set_frequency(14_074_000).await?;
+      radio.set_mode(Mode::DataUsb).await?;
+
+      let s = radio.signal_strength().await?;
+      println!("S-meter: {s}");
+      Ok(())
+  }
+#+end_src
+
+** Design rationale
+
+- *Small core trait* — =Radio= has only frequency/mode/PTT. Every radio from a vintage IC-781 to a modern IC-705 can implement this.
+- *Capability traits* — =RadioMeter=, =RadioScope=, =RadioInfo= are separate. Drivers only implement what the hardware supports. No dummy methods.
+- *Protocol-agnostic* — Icom CI-V, Yaesu CAT, Kenwood TS-xxx all hide behind the same =Radio= trait. Protocol details live in driver modules.
+- *Symmetric get/set* — =frequency()= / =set_frequency()= instead of a monolithic =state()= snapshot. Cleaner for both polling and event-driven radios.
+- *Unix philosophy* — Local serial access by default. For remote radios, use SSH port forwarding or =socat= — no custom networking protocol needed.

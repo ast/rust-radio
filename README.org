@@ -20,9 +20,8 @@ A Rust workspace for software-defined radio reception, real-time audio streaming
 - [[file:rtp/README.org][rtp]] — RTP header construction for network audio
 - [[file:sideband/README.org][sideband]] — Captures audio via =cpal=, encodes with Opus, streams as RTP/UDP
 
-*** Radio Control (Icom CI-V)
-- [[file:sidebridge/README.org][sidebridge]] — Async =RadioTrait= abstraction with CI-V packet types
-- [[file:serial-bridge/README.org][serial-bridge]] — TCP-to-serial bridge for Icom IC-705 with =nom=-based CI-V parser and =tokio-util= codec
+*** Radio Control
+- [[file:sidebridge/README.org][sidebridge]] — Async =Radio= trait hierarchy, Icom CI-V parser/codec (=nom=), and =civ-bridge=/=civ-client= binaries
 
 ** Building
 
@@ -50,8 +49,6 @@ A =Justfile= is provided for common workflows:
   just build-pi              # cross-build sideband for Pi
   just upload                # build + scp to remote "shack"
   just deploy                # build + upload + run on Pi
-  just build-bridge-pi       # cross-build serial-bridge for Pi
-  just upload-bridge-pi      # scp serial-bridge to Pi
 #+end_src
 
 ** Dependencies

@@ -9,8 +9,8 @@ use nom::{
     number::complete::u8,
 };
 
-use crate::icom_civ::civ_frame::CivFrame;
-use crate::icom_civ::commands::CivCommand;
+use crate::icom_civ::frame::CivFrame;
+use crate::icom_civ::command::CivCommand;
 
 #[derive(Error, Debug)]
 pub enum CivError {

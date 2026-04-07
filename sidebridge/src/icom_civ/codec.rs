@@ -4,7 +4,7 @@ use bytes::{Buf, Bytes, BytesMut};
 use std::io;
 use tokio_util::codec::{Decoder, Encoder};
 
-use crate::icom_civ::civ_frame::CivFrame;
+use crate::icom_civ::frame::CivFrame;
 use crate::icom_civ::parser::CivError;
 
 pub struct CivCodec;
