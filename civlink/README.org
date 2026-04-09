@@ -1,0 +1,237 @@
+#+TITLE: civlink
+#+AUTHOR: SM6WJM
+
+* civlink
+
+WebRTC-based remote control interface for Icom amateur radios (IC-705, IC-7300, etc.).
+
+Provides a browser-based frontend for full radio operation — audio, spectrum, and rig control — over the network using WebRTC for low-latency media transport.
+
+* Features
+
+- Bidirectional audio via WebRTC media tracks
+- Live spectrum display (bins read directly from the radio)
+- Rig control: frequency, mode, PTT
+- Multiple listeners, single controller
+- Supports Icom CI-V radios via the =sidebridge= crate
+
+* Architecture
+
+#+BEGIN_SRC
+  ┌─────────────────────────────────────────────────────┐
+  │  Browser                                            │
+  │  ┌───────────────────────────────────────────────┐  │
+  │  │  SolidJS / TypeScript (Vite)                  │  │
+  │  │  ┌─────────┐ ┌──────────┐ ┌───────────────┐   │  │
+  │  │  │ VFO     │ │ Spectrum │ │ Audio         │   │  │
+  │  │  │ Display │ │ (Canvas) │ │ Controls      │   │  │
+  │  │  └─────────┘ └──────────┘ └───────────────┘   │  │
+  │  └──────────┬───────────────────────┬────────────┘  │
+  │        WebSocket                 WebRTC             │
+  │     (signaling)         (audio + data channel)      │
+  └────────┬────────────────────────────┬───────────────┘
+           │                            │
+  ┌────────┴────────────────────────────┴───────────────┐
+  │  axum backend (Rust)                                │
+  │  ┌──────────┐ ┌──────────────┐ ┌────────────────┐   │
+  │  │ Auth     │ │ Signaling    │ │ WebRTC         │   │
+  │  │ (argon2) │ │ (WebSocket)  │ │ (webrtc-rs)    │   │
+  │  └──────────┘ └──────────────┘ └───────┬────────┘   │
+  │  ┌──────────┐ ┌──────────────┐         │            │
+  │  │ Config   │ │ Controller   │         │            │
+  │  │ (TOML)   │ │ (1 operator) │         │            │
+  │  └──────────┘ └──────────────┘         │            │
+  │  ┌─────────────────────────────────────┴────────┐   │
+  │  │  Audio pipeline                              │   │
+  │  │  cpal ←→ ringbuf ←→ opus ←→ WebRTC tracks   │    │
+  │  └──────────────────────────────────────────────┘   │
+  │  ┌──────────────────────────────────────────────┐   │
+  │  │  Radio control                               │   │
+  │  │  sidebridge (CI-V) ←→ Transport (serial/TCP) │   │
+  │  └──────────────────────┬───────────────────────┘   │
+  └─────────────────────────┬───────────────────────────┘
+                            │
+  ┌─────────────────────────┴───────────────────────────┐
+  │  Icom Radio (IC-705 / IC-7300)                      │
+  │  CI-V (serial or TCP via serial-bridge)             │
+  │  USB Audio (capture + playback)                     │
+  └─────────────────────────────────────────────────────┘
+#+END_SRC
+
+** Project structure
+
+#+BEGIN_SRC
+civlink/
+├── src/
+│   ├── main.rs                  ← clap CLI dispatcher
+│   ├── lib.rs                   ← module declarations
+│   ├── config.rs                ← TOML config types
+│   ├── error.rs                 ← CivlinkError enum
+│   ├── auth.rs                  ← argon2 hashing, tokens
+│   ├── session.rs               ← in-memory session store
+│   ├── app_state.rs             ← shared server state
+│   ├── commands/
+│   │   ├── serve.rs             ← start axum server
+│   │   ├── user_add.rs          ← add user to config
+│   │   ├── user_remove.rs       ← remove user from config
+│   │   └── user_list.rs         ← list configured users
+│   ├── server/
+│   │   ├── router.rs            ← axum route definitions
+│   │   ├── api.rs               ← REST endpoints (login)
+│   │   └── signaling.rs         ← WebSocket signaling
+│   ├── radio/
+│   │   ├── radio_handle.rs      ← sidebridge radio interface
+│   │   └── controller.rs        ← exclusive control lock
+│   ├── audio/
+│   │   ├── audio_capture.rs     ← cpal → opus encoding
+│   │   └── audio_playback.rs    ← opus decoding → cpal
+│   └── webrtc_transport/
+│       ├── peer.rs              ← peer connection lifecycle
+│       ├── media_track.rs       ← audio track management
+│       └── data_channel.rs      ← rig control messages
+├── tests/                       ← integration tests
+├── frontend/
+│   ├── src/
+│   │   ├── index.tsx            ← SolidJS entry point
+│   │   ├── App.tsx              ← top-level component
+│   │   ├── components/          ← UI components
+│   │   ├── api/                 ← auth, signaling, webrtc
+│   │   ├── types/               ← TypeScript type definitions
+│   │   └── styles/              ← CSS
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── vite.config.ts
+└── civlink.toml                 ← runtime configuration
+#+END_SRC
+
+* Prerequisites
+
+** System libraries
+
+#+BEGIN_SRC bash
+# Debian/Ubuntu
+sudo apt install libasound2-dev cmake
+
+# GNU Guix
+guix install alsa-lib cmake
+#+END_SRC
+
+** Rust
+
+Install via [[https://rustup.rs][rustup]] (the official Rust toolchain installer):
+
+#+BEGIN_SRC bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+rustup update
+#+END_SRC
+
+** Node.js and TypeScript
+
+*** GNU Guix
+
+#+BEGIN_SRC bash
+guix install node
+#+END_SRC
+
+For a reproducible development shell:
+
+#+BEGIN_SRC bash
+guix shell node -- bash
+#+END_SRC
+
+*** nvm (alternative)
+
+#+BEGIN_SRC bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+# Restart your shell, then:
+nvm install --lts
+nvm use --lts
+#+END_SRC
+
+*** Frontend dependencies
+
+Once Node.js is available, install the frontend toolchain:
+
+#+BEGIN_SRC bash
+cd frontend
+npm install                           # install project dependencies (includes typescript)
+#+END_SRC
+
+TypeScript is listed as a dev dependency in =frontend/package.json= so =npm install= is all that's needed.
+
+* Building
+
+#+BEGIN_SRC bash
+# Backend
+cargo build -p civlink --release
+
+# Frontend
+cd frontend && npm run build          # production build to frontend/dist/
+#+END_SRC
+
+* Configuration
+
+Create a =civlink.toml= configuration file:
+
+#+BEGIN_SRC toml
+[server]
+listen_addr = "0.0.0.0:8080"
+frontend_dir = "frontend/dist"
+
+[radio]
+url = "tcp://shack:9000"              # or "serial:///dev/ttyUSB0?baud=115200"
+audio_device = "USB Audio CODEC"
+sample_rate = 48000
+#+END_SRC
+
+* User management
+
+Users are stored in the =civlink.toml= config file with argon2-hashed passwords.
+
+#+BEGIN_SRC bash
+# Add a user (prompts for password)
+civlink -c civlink.toml user-add sm6wjm
+
+# List users
+civlink -c civlink.toml user-list
+
+# Remove a user
+civlink -c civlink.toml user-remove sm6wjm
+#+END_SRC
+
+* Running
+
+#+BEGIN_SRC bash
+# Start the server
+civlink -c civlink.toml serve
+#+END_SRC
+
+Then open =http://localhost:8080= in a browser and log in.
+
+* Development
+
+For frontend development with hot reload:
+
+#+BEGIN_SRC bash
+# Terminal 1: start the backend
+cargo run -p civlink -- -c civlink.toml serve
+
+# Terminal 2: start the vite dev server
+cd frontend && npm run dev
+#+END_SRC
+
+* Deployment to Raspberry Pi
+
+Cross-compile and deploy to the Pi (hostname =shack=):
+
+#+BEGIN_SRC bash
+cross build -p civlink --target aarch64-unknown-linux-gnu --release
+scp target/aarch64-unknown-linux-gnu/release/civlink shack:~/
+#+END_SRC
+
+See the workspace root =Justfile= for additional deploy recipes.
+
+* License
+
+Part of the rust-radio workspace by SM6WJM.

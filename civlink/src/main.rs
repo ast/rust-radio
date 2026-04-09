@@ -1,0 +1,55 @@
+// Copyright SM6WJM 2026
+
+use std::path::PathBuf;
+
+use clap::{Parser, Subcommand};
+
+#[derive(Parser)]
+#[command(name = "civlink", about = "WebRTC remote control for Icom radios")]
+struct Cli {
+    /// Path to config file
+    #[arg(short, long, default_value = "civlink.toml")]
+    config: PathBuf,
+
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Start the server
+    Serve,
+    /// Add a user
+    UserAdd { username: String },
+    /// Remove a user
+    UserRemove { username: String },
+    /// List configured users
+    UserList,
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+
+    let cli = Cli::parse();
+
+    match cli.command {
+        Command::Serve => {
+            let config = civlink::Config::load(&cli.config)?;
+            civlink::commands::serve::run(config).await?;
+        }
+        Command::UserAdd { username } => {
+            civlink::commands::user_add::run(&cli.config, &username)?;
+        }
+        Command::UserRemove { username } => {
+            civlink::commands::user_remove::run(&cli.config, &username)?;
+        }
+        Command::UserList => {
+            civlink::commands::user_list::run(&cli.config)?;
+        }
+    }
+
+    Ok(())
+}
