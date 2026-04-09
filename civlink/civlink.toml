@@ -1,0 +1,12 @@
+[server]
+listen_addr = "0.0.0.0:8080"
+frontend_dir = "frontend/dist"
+
+[radio]
+url = "tcp://shack:9000"
+audio_device = "USB Audio CODEC"
+sample_rate = 48000
+
+[[users]]
+username = "sm6wjm"
+password_hash = "$argon2id$v=19$m=19456,t=2,p=1$S7u+nh62bY3IPPRXIBtIIg$bpBVyMRxEbOrDIOb6YsjgBQYGTR0EtbwLC2y5euqWd4"

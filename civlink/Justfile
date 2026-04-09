@@ -1,0 +1,48 @@
+binary := "civlink"
+target_pi := "aarch64-unknown-linux-gnu"
+remote := "shack"
+config := "civlink.toml"
+workspace := justfile_directory() / ".."
+target_dir := workspace / "target"
+bundle_name := "civlink-bundle.tar.gz"
+
+# Build backend for Pi and frontend
+build: build-pi build-frontend
+
+# Cross-compile backend for Raspberry Pi
+build-pi:
+    cross build -p {{binary}} --target {{target_pi}} --release
+
+# Build frontend
+build-frontend:
+    cd frontend && npm run build
+
+# Create a tarball with binary, frontend, and config
+bundle: build
+    tar czf {{bundle_name}} \
+        -C {{target_dir}}/{{target_pi}}/release {{binary}} \
+        -C {{justfile_directory()}} frontend/dist {{config}}
+
+# Upload bundle and extract on Pi
+upload: bundle
+    scp {{bundle_name}} {{remote}}:~/
+    ssh {{remote}} "tar xzf ~/{{bundle_name}} && chmod +x ~/{{binary}}"
+
+# Run on the Pi
+run args="":
+    ssh {{remote}} "RUST_LOG=civlink=debug ~/{{binary}} -c ~/{{config}} serve {{args}}"
+
+# Full deploy: build, bundle, upload, and run
+deploy args="": upload
+    ssh {{remote}} "RUST_LOG=civlink=debug ~/{{binary}} -c ~/{{config}} serve {{args}}"
+
+# --- Local commands ---
+
+# Build and run locally
+run-local args="":
+    cargo build -p {{binary}}
+    {{target_dir}}/debug/{{binary}} -c {{config}} serve {{args}}
+
+# Run tests
+test:
+    cargo test -p {{binary}}

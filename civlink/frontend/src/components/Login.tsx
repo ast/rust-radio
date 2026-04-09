@@ -15,8 +15,10 @@ const Login: Component<LoginProps> = (props) => {
     setError(null);
     try {
       const token = await login(username(), password());
+      console.log("[login] authenticated, switching to radio panel");
       props.onLogin(token);
-    } catch {
+    } catch (e) {
+      console.error("[login] failed:", e);
       setError("Invalid credentials");
     }
   };

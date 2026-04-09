@@ -26,18 +26,29 @@ pub async fn login(
     State(state): State<Arc<AppState>>,
     Json(req): Json<LoginRequest>,
 ) -> impl IntoResponse {
+    tracing::info!("login attempt for user '{}'", req.username);
+
     let user = state.config.users.iter().find(|u| u.username == req.username);
 
     let Some(user) = user else {
+        tracing::warn!("login failed: unknown user '{}'", req.username);
         return (StatusCode::UNAUTHORIZED, "invalid credentials").into_response();
     };
 
     match auth::verify_password(&req.password, &user.password_hash) {
         Ok(true) => {
             let token = auth::generate_token();
-            state.sessions.insert(token.clone(), req.username).await;
+            state.sessions.insert(token.clone(), req.username.clone()).await;
+            tracing::info!("login successful for user '{}'", req.username);
             Json(LoginResponse { token }).into_response()
         }
-        _ => (StatusCode::UNAUTHORIZED, "invalid credentials").into_response(),
+        Ok(false) => {
+            tracing::warn!("login failed: wrong password for user '{}'", req.username);
+            (StatusCode::UNAUTHORIZED, "invalid credentials").into_response()
+        }
+        Err(e) => {
+            tracing::error!("login error for user '{}': {}", req.username, e);
+            (StatusCode::UNAUTHORIZED, "invalid credentials").into_response()
+        }
     }
 }

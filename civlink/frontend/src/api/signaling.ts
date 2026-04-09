@@ -6,15 +6,31 @@ export class SignalingClient {
 
   connect(token: string): void {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    this.ws = new WebSocket(`${protocol}//${window.location.host}/api/ws?token=${token}`);
+    const url = `${protocol}//${window.location.host}/api/ws?token=${token}`;
+    console.log(`[signaling] connecting to ${url}`);
+    this.ws = new WebSocket(url);
+
+    this.ws.onopen = () => {
+      console.log("[signaling] WebSocket connected");
+    };
 
     this.ws.onmessage = (event) => {
+      console.log("[signaling] received:", event.data);
       const msg: SignalingMessage = JSON.parse(event.data);
       this.onMessage?.(msg);
+    };
+
+    this.ws.onerror = (event) => {
+      console.error("[signaling] WebSocket error:", event);
+    };
+
+    this.ws.onclose = (event) => {
+      console.log(`[signaling] WebSocket closed: code=${event.code} reason=${event.reason}`);
     };
   }
 
   send(msg: SignalingMessage): void {
+    console.log("[signaling] sending:", msg.type);
     this.ws?.send(JSON.stringify(msg));
   }
 
@@ -23,6 +39,7 @@ export class SignalingClient {
   }
 
   close(): void {
+    console.log("[signaling] closing connection");
     this.ws?.close();
     this.ws = null;
   }

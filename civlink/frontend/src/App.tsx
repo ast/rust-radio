@@ -5,6 +5,8 @@ import RadioPanel from "./components/RadioPanel";
 const App: Component = () => {
   const [token, setToken] = createSignal<string | null>(null);
 
+  console.log("[app] civlink frontend loaded");
+
   return (
     <div class="app">
       <Show when={token()} fallback={<Login onLogin={setToken} />}>
