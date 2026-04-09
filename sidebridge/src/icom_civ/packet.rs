@@ -20,14 +20,25 @@ pub const IC705_ADDR: u8 = 0xa4;
 pub const CONTROLLER_ADDR: u8 = 0xe0;
 
 fn encode_freq_bcd(mut freq: u64, buf: &mut [u8; 16]) -> usize {
-    for i in 0..5 {
+    for b in buf.iter_mut().take(5) {
         let low = (freq % 10) as u8;
         freq /= 10;
         let high = (freq % 10) as u8;
         freq /= 10;
-        buf[i] = (high << 4) | low;
+        *b = (high << 4) | low;
     }
     5
+}
+
+fn encode_span_bcd(mut span: u64, buf: &mut [u8; 16]) -> usize {
+    for b in buf.iter_mut().take(6) {
+        let low = (span % 10) as u8;
+        span /= 10;
+        let high = (span % 10) as u8;
+        span /= 10;
+        *b = (high << 4) | low;
+    }
+    6
 }
 
 impl CivPacket {
@@ -112,6 +123,59 @@ impl CivPacket {
         Self::new(CivCommandCode::ReadRfPower)
     }
 
+    // --- Scope control ---
+
+    /// Enable or disable the scope display.
+    pub fn scope_on_off(on: bool) -> Self {
+        let mut pkt = Self::new(CivCommandCode::ScopeOnOff);
+        pkt.data[0] = if on { 0x01 } else { 0x00 };
+        pkt.data_len = 1;
+        pkt
+    }
+
+    /// Enable or disable scope waveform data output.
+    pub fn scope_wave_output(on: bool) -> Self {
+        let mut pkt = Self::new(CivCommandCode::ScopeWaveOutput);
+        pkt.data[0] = if on { 0x01 } else { 0x00 };
+        pkt.data_len = 1;
+        pkt
+    }
+
+    /// Set scope to center mode (false) or fixed mode (true).
+    pub fn scope_center_fixed(fixed: bool) -> Self {
+        let mut pkt = Self::new(CivCommandCode::ScopeCenterFixed);
+        pkt.data[0] = 0x00;
+        pkt.data[1] = if fixed { 0x01 } else { 0x00 };
+        pkt.data_len = 2;
+        pkt
+    }
+
+    /// Set the scope span in center mode.
+    /// `span_hz` should be one of: 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000.
+    pub fn scope_span(span_hz: u64) -> Self {
+        let mut pkt = Self::new(CivCommandCode::ScopeSpan);
+        pkt.data_len = encode_span_bcd(span_hz, &mut pkt.data);
+        pkt
+    }
+
+    /// Enable or disable scope hold.
+    pub fn scope_hold(on: bool) -> Self {
+        let mut pkt = Self::new(CivCommandCode::ScopeHold);
+        pkt.data[0] = 0x00;
+        pkt.data[1] = if on { 0x01 } else { 0x00 };
+        pkt.data_len = 2;
+        pkt
+    }
+
+    /// Set scope sweep speed: 0=FAST, 1=MID, 2=SLOW.
+    pub fn scope_sweep_speed(speed: u8) -> Self {
+        let mut pkt = Self::new(CivCommandCode::ScopeSweepSpeed);
+        pkt.data[0] = 0x00;
+        pkt.data[1] = speed;
+        pkt.data_len = 2;
+        pkt
+    }
+
     /// Serialize into wire bytes: preamble + payload + EOM.
     pub fn serialize(&self) -> Vec<u8> {
         let subcmd = self.code.subcmd();
@@ -187,5 +251,73 @@ mod tests {
         let pkt = CivPacket::read_frequency();
         // CivCodec wraps preamble/EOM itself, so payload is just target+source+cmd
         assert_eq!(pkt.payload(), vec![0xa4, 0xe0, 0x03]);
+    }
+
+    #[test]
+    fn test_scope_on_off_serialize() {
+        let pkt = CivPacket::scope_on_off(true);
+        assert_eq!(
+            pkt.serialize(),
+            vec![0xfe, 0xfe, 0xa4, 0xe0, 0x27, 0x10, 0x01, 0xfd]
+        );
+
+        let pkt = CivPacket::scope_on_off(false);
+        assert_eq!(
+            pkt.serialize(),
+            vec![0xfe, 0xfe, 0xa4, 0xe0, 0x27, 0x10, 0x00, 0xfd]
+        );
+    }
+
+    #[test]
+    fn test_scope_wave_output_serialize() {
+        let pkt = CivPacket::scope_wave_output(true);
+        assert_eq!(
+            pkt.serialize(),
+            vec![0xfe, 0xfe, 0xa4, 0xe0, 0x27, 0x11, 0x01, 0xfd]
+        );
+    }
+
+    #[test]
+    fn test_scope_center_fixed_serialize() {
+        let pkt = CivPacket::scope_center_fixed(false);
+        assert_eq!(
+            pkt.serialize(),
+            vec![0xfe, 0xfe, 0xa4, 0xe0, 0x27, 0x14, 0x00, 0x00, 0xfd]
+        );
+
+        let pkt = CivPacket::scope_center_fixed(true);
+        assert_eq!(
+            pkt.serialize(),
+            vec![0xfe, 0xfe, 0xa4, 0xe0, 0x27, 0x14, 0x00, 0x01, 0xfd]
+        );
+    }
+
+    #[test]
+    fn test_scope_span_serialize() {
+        // 100000 Hz (100 kHz) → BCD LE: [0x00, 0x00, 0x10, 0x00, 0x00, 0x00]
+        let pkt = CivPacket::scope_span(100_000);
+        assert_eq!(
+            pkt.serialize(),
+            vec![0xfe, 0xfe, 0xa4, 0xe0, 0x27, 0x15, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0xfd]
+        );
+    }
+
+    #[test]
+    fn test_scope_hold_serialize() {
+        let pkt = CivPacket::scope_hold(true);
+        assert_eq!(
+            pkt.serialize(),
+            vec![0xfe, 0xfe, 0xa4, 0xe0, 0x27, 0x17, 0x00, 0x01, 0xfd]
+        );
+    }
+
+    #[test]
+    fn test_scope_sweep_speed_serialize() {
+        // MID = 1
+        let pkt = CivPacket::scope_sweep_speed(1);
+        assert_eq!(
+            pkt.serialize(),
+            vec![0xfe, 0xfe, 0xa4, 0xe0, 0x27, 0x1a, 0x00, 0x01, 0xfd]
+        );
     }
 }

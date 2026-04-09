@@ -6,3 +6,4 @@ pub mod command_code;
 pub mod frame;
 pub mod packet;
 pub mod parser;
+pub mod scope;

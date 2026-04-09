@@ -2,6 +2,8 @@
 
 use bytes::Bytes;
 
+use super::scope::{ScopeSetting, ScopeWaveData};
+
 #[derive(Debug, PartialEq)]
 pub enum CivCommand {
     TransceiverFreq(u64), // 0x00, 0x03, 0x05
@@ -11,10 +13,11 @@ pub enum CivCommand {
     }, // 0x01, 0x04, 0x06
     SetPtt(bool),         // 0x1c 0x00
     SignalMeter(u8),      // 0x15 0x02
-    Waterfall {
-        // 0x27
+    ScopeWave(ScopeWaveData),       // 0x27 0x00 — parsed waveform division
+    ScopeSetting(ScopeSetting),     // 0x27 0x10-0x1E — parsed scope setting
+    ScopeRaw {                      // 0x27 — fallback for unknown/failed parse
         sub_cmd: u8,
-        scope_data: Vec<u8>,
+        data: Vec<u8>,
     },
     Ok,      // 0xfb (ACK)
     NotGood, // 0xfa (NAK)

@@ -63,7 +63,13 @@ pub enum CivCommandCode {
     AntennaTuner,      // 0x1C 0x01
 
     // Scope (cmd 0x27)
-    Scope,             // 0x27 — sub varies
+    ScopeWaveData,     // 0x27 0x00
+    ScopeOnOff,        // 0x27 0x10
+    ScopeWaveOutput,   // 0x27 0x11
+    ScopeCenterFixed,  // 0x27 0x14
+    ScopeSpan,         // 0x27 0x15
+    ScopeHold,         // 0x27 0x17
+    ScopeSweepSpeed,   // 0x27 0x1A
 
     // Response codes
     Ok,                // 0xFB
@@ -113,7 +119,13 @@ impl CivCommandCode {
 
             Self::Ptt | Self::AntennaTuner => 0x1c,
 
-            Self::Scope => 0x27,
+            Self::ScopeWaveData
+            | Self::ScopeOnOff
+            | Self::ScopeWaveOutput
+            | Self::ScopeCenterFixed
+            | Self::ScopeSpan
+            | Self::ScopeHold
+            | Self::ScopeSweepSpeed => 0x27,
 
             Self::Ok => 0xfb,
             Self::NotGood => 0xfa,
@@ -135,9 +147,17 @@ impl CivCommandCode {
             | Self::MemoryWrite
             | Self::MemoryCopyToVfo
             | Self::MemoryClear
-            | Self::Scope
             | Self::Ok
             | Self::NotGood => None,
+
+            // Scope
+            Self::ScopeWaveData => Some(0x00),
+            Self::ScopeOnOff => Some(0x10),
+            Self::ScopeWaveOutput => Some(0x11),
+            Self::ScopeCenterFixed => Some(0x14),
+            Self::ScopeSpan => Some(0x15),
+            Self::ScopeHold => Some(0x17),
+            Self::ScopeSweepSpeed => Some(0x1a),
 
             // VFO
             Self::SelectVfoA => Some(0x00),
@@ -230,7 +250,13 @@ impl CivCommandCode {
             (0x1c, Some(0x00) | None) => Some(Self::Ptt),
             (0x1c, Some(0x01)) => Some(Self::AntennaTuner),
 
-            (0x27, _) => Some(Self::Scope),
+            (0x27, Some(0x00)) => Some(Self::ScopeWaveData),
+            (0x27, Some(0x10)) => Some(Self::ScopeOnOff),
+            (0x27, Some(0x11)) => Some(Self::ScopeWaveOutput),
+            (0x27, Some(0x14)) => Some(Self::ScopeCenterFixed),
+            (0x27, Some(0x15)) => Some(Self::ScopeSpan),
+            (0x27, Some(0x17)) => Some(Self::ScopeHold),
+            (0x27, Some(0x1a)) => Some(Self::ScopeSweepSpeed),
 
             (0xfb, _) => Some(Self::Ok),
             (0xfa, _) => Some(Self::NotGood),
@@ -300,7 +326,13 @@ mod tests {
             CivCommandCode::ReadTransceiverId,
             CivCommandCode::Ptt,
             CivCommandCode::AntennaTuner,
-            CivCommandCode::Scope,
+            CivCommandCode::ScopeWaveData,
+            CivCommandCode::ScopeOnOff,
+            CivCommandCode::ScopeWaveOutput,
+            CivCommandCode::ScopeCenterFixed,
+            CivCommandCode::ScopeSpan,
+            CivCommandCode::ScopeHold,
+            CivCommandCode::ScopeSweepSpeed,
             CivCommandCode::Ok,
             CivCommandCode::NotGood,
         ];

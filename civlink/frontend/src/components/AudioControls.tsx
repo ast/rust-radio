@@ -1,8 +1,19 @@
-import { type Component, createSignal } from "solid-js";
+import { type Component, createSignal, createEffect } from "solid-js";
 
-const AudioControls: Component = () => {
+interface AudioControlsProps {
+  audioElement?: HTMLAudioElement;
+}
+
+const AudioControls: Component<AudioControlsProps> = (props) => {
   const [volume, setVolume] = createSignal(80);
   const [muted, setMuted] = createSignal(false);
+
+  createEffect(() => {
+    if (props.audioElement) {
+      props.audioElement.muted = muted();
+      props.audioElement.volume = volume() / 100;
+    }
+  });
 
   return (
     <div class="audio-controls">

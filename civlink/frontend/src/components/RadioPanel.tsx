@@ -11,15 +11,15 @@ interface RadioPanelProps {
 const RadioPanel: Component<RadioPanelProps> = (props) => {
   const [connected, setConnected] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+  const [audioEl, setAudioEl] = createSignal<HTMLAudioElement | undefined>();
   let pc: RTCPeerConnection | undefined;
-  let audioEl: HTMLAudioElement | undefined;
 
   onMount(async () => {
     try {
       console.log("[radio-panel] establishing WebRTC connection");
       const result = await createPeerConnection(props.token);
       pc = result.pc;
-      audioEl = result.audioElement;
+      setAudioEl(result.audioElement);
 
       pc.onconnectionstatechange = () => {
         console.log(`[radio-panel] connection state: ${pc!.connectionState}`);
@@ -52,7 +52,7 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
       </div>
       <VfoDisplay frequency={14074000} mode="USB" />
       <Spectrum bins={[]} />
-      <AudioControls />
+      <AudioControls audioElement={audioEl()} />
     </div>
   );
 };

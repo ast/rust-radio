@@ -1,0 +1,39 @@
+target_pi := "aarch64-unknown-linux-gnu"
+remote := "shack"
+radio_url := "serial:///dev/ic-705a"
+workspace := justfile_directory() / ".."
+target_dir := workspace / "target"
+
+# Cross-compile all sidebridge binaries for Raspberry Pi
+build-pi:
+    cross build -p sidebridge --target {{target_pi}} --release
+
+# Stop any running sidebridge binaries on Pi
+stop:
+    -ssh {{remote}} "pkill civ-poll; pkill civ-client; pkill serial-bridge"
+
+# Upload binaries to Pi (stops running instances first)
+upload: build-pi stop
+    scp {{target_dir}}/{{target_pi}}/release/civ-poll {{remote}}:~/
+    scp {{target_dir}}/{{target_pi}}/release/civ-client {{remote}}:~/
+    scp {{target_dir}}/{{target_pi}}/release/serial-bridge {{remote}}:~/
+
+# Run civ-poll on the Pi (frequency + S-meter)
+poll args="": upload
+    ssh {{remote}} "~/civ-poll {{radio_url}} {{args}}"
+
+# Run civ-poll with scope on the Pi
+scope args="": upload
+    ssh {{remote}} "~/civ-poll {{radio_url}} --scope {{args}}"
+
+# Run serial-bridge on the Pi
+bridge args="": upload
+    ssh {{remote}} "~/serial-bridge {{args}}"
+
+# Run civ-client on the Pi
+client args="": upload
+    ssh {{remote}} "~/civ-client localhost:9000 {{args}}"
+
+# Build and run tests locally
+test:
+    cargo test -p sidebridge

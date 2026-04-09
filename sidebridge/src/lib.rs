@@ -14,4 +14,5 @@ pub use traits::{
 pub use icom_civ::command::CivCommand;
 pub use icom_civ::command_code::CivCommandCode;
 pub use icom_civ::frame::CivFrame;
+pub use icom_civ::scope::{ScopeAssembler, ScopeFreqInfo, ScopeMode, ScopeSetting, ScopeWaveData};
 pub use transport::Transport;
