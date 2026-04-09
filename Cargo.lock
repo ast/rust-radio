@@ -613,6 +613,7 @@ dependencies = [
  "axum",
  "axum-extra",
  "base64",
+ "bytes",
  "clap",
  "cpal 0.17.1",
  "http-body-util",
@@ -634,6 +635,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "webrtc",
+ "webrtc-media",
 ]
 
 [[package]]

@@ -38,6 +38,10 @@ export class SignalingClient {
     this.onMessage = handler;
   }
 
+  isOpen(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN;
+  }
+
   close(): void {
     console.log("[signaling] closing connection");
     this.ws?.close();

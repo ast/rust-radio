@@ -79,6 +79,25 @@ body {
   border-radius: 8px;
 }
 
+.connection-status {
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+.status-connected {
+  color: #00ff88;
+}
+
+.status-connecting {
+  color: #ffaa00;
+}
+
+.status-error {
+  color: #ff4444;
+}
+
 .audio-controls {
   display: flex;
   align-items: center;

@@ -28,12 +28,16 @@ upload: bundle
     scp {{bundle_name}} {{remote}}:~/
     ssh {{remote}} "tar xzf ~/{{bundle_name}} && chmod +x ~/{{binary}}"
 
-# Run on the Pi
-run args="":
+# Stop civlink on the Pi
+stop:
+    -ssh {{remote}} "pkill {{binary}}"
+
+# Run on the Pi (stops any existing instance first)
+run args="": stop
     ssh {{remote}} "RUST_LOG=civlink=debug ~/{{binary}} -c ~/{{config}} serve {{args}}"
 
 # Full deploy: build, bundle, upload, and run
-deploy args="": upload
+deploy args="": upload stop
     ssh {{remote}} "RUST_LOG=civlink=debug ~/{{binary}} -c ~/{{config}} serve {{args}}"
 
 # --- Local commands ---

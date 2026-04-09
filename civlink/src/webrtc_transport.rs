@@ -3,3 +3,5 @@
 pub mod data_channel;
 pub mod media_track;
 pub mod peer;
+
+pub use peer::create_peer_connection;

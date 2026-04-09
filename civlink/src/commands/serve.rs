@@ -7,6 +7,7 @@ use tokio::net::TcpListener;
 use tower_http::services::ServeDir;
 
 use crate::app_state::AppState;
+use crate::audio::AudioCapture;
 use crate::config::Config;
 use crate::server::router::api_router;
 use crate::Result;
@@ -21,7 +22,26 @@ pub async fn run(config: Config) -> Result<()> {
     );
     tracing::info!("configured users: {}", config.users.len());
 
-    let state = AppState::new(config.clone());
+    // Start audio capture
+    let audio = match AudioCapture::start(
+        config.radio.audio_device.as_deref(),
+        config.radio.sample_rate,
+        2, // stereo
+    ) {
+        Ok(capture) => {
+            tracing::info!("audio capture started");
+            Some(capture)
+        }
+        Err(e) => {
+            tracing::warn!("audio capture unavailable: {e}");
+            None
+        }
+    };
+
+    let state = match audio {
+        Some(a) => AppState::with_audio(config.clone(), a),
+        None => AppState::new(config.clone()),
+    };
 
     let app = Router::new()
         .nest("/api", api_router(Arc::clone(&state)))
