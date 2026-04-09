@@ -34,29 +34,38 @@ pub async fn ws_handler(
 async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
     tracing::info!("WebSocket connection established, waiting for offer");
 
-    // Get a broadcast receiver for audio if available
-    let audio_rx = state.audio.as_ref().map(|a| a.subscribe());
-
     // Wait for the client's offer
     let Some(offer) = wait_for_offer(&mut socket).await else {
         tracing::warn!("client disconnected before sending offer");
         return;
     };
 
-    // Create peer connection with audio track
-    let (pc, _audio_track) = match audio_rx {
-        Some(rx) => match webrtc_transport::create_peer_connection(rx).await {
-            Ok(result) => result,
-            Err(e) => {
-                tracing::error!("failed to create peer connection: {e}");
-                return;
-            }
-        },
-        None => {
-            tracing::warn!("no audio capture available, cannot create peer connection");
+    // Create peer connection (audio is optional)
+    let audio_rx = state.audio.as_ref().map(|a| a.subscribe());
+    let pc = match webrtc_transport::create_peer_connection(audio_rx).await {
+        Ok(pc) => pc,
+        Err(e) => {
+            tracing::error!("failed to create peer connection: {e}");
             return;
         }
     };
+
+    // Set up radio data channel (spectrum + frequency) if radio is connected
+    if let Some(ref handle) = state.radio {
+        let radio = handle.radio();
+        let scope_stream = handle.scope_stream();
+        let freq_stream = handle.freq_stream();
+        if let Err(e) = webrtc_transport::data_channel::setup_radio_channel(
+            &pc,
+            radio,
+            scope_stream,
+            freq_stream,
+        )
+        .await
+        {
+            tracing::warn!("failed to set up radio data channel: {e}");
+        }
+    }
 
     // Set the remote description (client's offer)
     if let Err(e) = pc.set_remote_description(offer).await {

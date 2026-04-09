@@ -1,9 +1,17 @@
 import { SignalingClient } from "./signaling";
 import type { SignalingMessage } from "../types/messages";
+import type { ScopeFrame } from "../types/radio";
+
+export interface PeerConnectionResult {
+  pc: RTCPeerConnection;
+  audioElement: HTMLAudioElement;
+  onScopeFrame: (handler: (frame: ScopeFrame) => void) => void;
+  onFrequency: (handler: (hz: number) => void) => void;
+}
 
 export async function createPeerConnection(
   token: string,
-): Promise<{ pc: RTCPeerConnection; audioElement: HTMLAudioElement }> {
+): Promise<PeerConnectionResult> {
   const signaling = new SignalingClient();
 
   const pc = new RTCPeerConnection({
@@ -14,12 +22,44 @@ export async function createPeerConnection(
   const audioElement = new Audio();
   audioElement.autoplay = true;
 
+  // Radio data handlers — set by the caller
+  let scopeHandler: ((frame: ScopeFrame) => void) | null = null;
+  let freqHandler: ((hz: number) => void) | null = null;
+
   // Handle remote tracks (audio from radio)
   pc.ontrack = (event) => {
     console.log(`[webrtc] remote track received: kind=${event.track.kind}, id=${event.track.id}`);
     if (event.streams.length > 0) {
       audioElement.srcObject = event.streams[0];
       console.log("[webrtc] audio stream attached to audio element");
+    }
+  };
+
+  // Handle data channels from server
+  pc.ondatachannel = (event) => {
+    const dc = event.channel;
+    console.log(`[webrtc] data channel received: ${dc.label}`);
+
+    if (dc.label === "radio") {
+      dc.onmessage = (msgEvent) => {
+        try {
+          const msg = JSON.parse(msgEvent.data);
+          switch (msg.type) {
+            case "spectrum":
+              if (scopeHandler) scopeHandler(msg as ScopeFrame);
+              break;
+            case "frequency":
+              if (freqHandler) freqHandler(msg.hz);
+              break;
+          }
+        } catch (e) {
+          console.error("[webrtc] failed to parse radio message:", e);
+        }
+      };
+
+      dc.onclose = () => {
+        console.log("[webrtc] radio data channel closed");
+      };
     }
   };
 
@@ -71,11 +111,19 @@ export async function createPeerConnection(
   // We need to add a transceiver for receiving audio (recvonly)
   pc.addTransceiver("audio", { direction: "recvonly" });
 
+  // Trigger SCTP negotiation so the server can create data channels
+  pc.createDataChannel("_init");
+
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
 
   console.log("[webrtc] sending SDP offer");
   signaling.send({ type: "offer", payload: offer });
 
-  return { pc, audioElement };
+  return {
+    pc,
+    audioElement,
+    onScopeFrame: (handler) => { scopeHandler = handler; },
+    onFrequency: (handler) => { freqHandler = handler; },
+  };
 }

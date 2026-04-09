@@ -14,22 +14,20 @@ use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSampl
 use webrtc_media::Sample;
 
 use crate::audio::AudioFrame;
-use crate::Result;
 use crate::error::CivlinkError;
+use crate::Result;
 
-/// Creates a new WebRTC peer connection with an audio track that streams
-/// Opus-encoded audio from the broadcast channel to the remote browser.
+/// Creates a new WebRTC peer connection, optionally with an audio track that
+/// streams Opus-encoded audio from the broadcast channel.
 pub async fn create_peer_connection(
-    audio_rx: broadcast::Receiver<AudioFrame>,
-) -> Result<(Arc<RTCPeerConnection>, Arc<TrackLocalStaticSample>)> {
+    audio_rx: Option<broadcast::Receiver<AudioFrame>>,
+) -> Result<Arc<RTCPeerConnection>> {
     let mut media_engine = MediaEngine::default();
     media_engine
         .register_default_codecs()
         .map_err(|e| CivlinkError::WebRtc(format!("failed to register codecs: {e}")))?;
 
-    let api = APIBuilder::new()
-        .with_media_engine(media_engine)
-        .build();
+    let api = APIBuilder::new().with_media_engine(media_engine).build();
 
     let config = RTCConfiguration {
         ice_servers: vec![RTCIceServer {
@@ -45,33 +43,31 @@ pub async fn create_peer_connection(
             .map_err(|e| CivlinkError::WebRtc(format!("failed to create peer connection: {e}")))?,
     );
 
-    // Create local audio track (Opus)
-    let audio_track = Arc::new(TrackLocalStaticSample::new(
-        RTCRtpCodecCapability {
-            mime_type: MIME_TYPE_OPUS.to_owned(),
-            clock_rate: 48000,
-            channels: 2,
-            sdp_fmtp_line: "minptime=10;useinbandfec=1".to_owned(),
-            rtcp_feedback: vec![],
-        },
-        "audio".to_owned(),
-        "civlink-audio".to_owned(),
-    ));
+    // Add audio track if capture is available
+    if let Some(rx) = audio_rx {
+        let audio_track = Arc::new(TrackLocalStaticSample::new(
+            RTCRtpCodecCapability {
+                mime_type: MIME_TYPE_OPUS.to_owned(),
+                clock_rate: 48000,
+                channels: 2,
+                sdp_fmtp_line: "minptime=10;useinbandfec=1".to_owned(),
+                rtcp_feedback: vec![],
+            },
+            "audio".to_owned(),
+            "civlink-audio".to_owned(),
+        ));
 
-    peer_connection
-        .add_track(audio_track.clone())
-        .await
-        .map_err(|e| CivlinkError::WebRtc(format!("failed to add audio track: {e}")))?;
+        peer_connection
+            .add_track(audio_track.clone())
+            .await
+            .map_err(|e| CivlinkError::WebRtc(format!("failed to add audio track: {e}")))?;
 
-    tracing::info!("WebRTC peer connection created with audio track");
+        tokio::spawn(pump_audio(rx, audio_track));
+    }
 
-    // Spawn a task that reads from the broadcast channel and writes to the track
-    let track = audio_track.clone();
-    tokio::spawn(async move {
-        pump_audio(audio_rx, track).await;
-    });
+    tracing::info!("WebRTC peer connection created");
 
-    Ok((peer_connection, audio_track))
+    Ok(peer_connection)
 }
 
 /// Reads Opus frames from the broadcast channel and writes them to the WebRTC track.

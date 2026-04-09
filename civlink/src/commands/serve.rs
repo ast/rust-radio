@@ -5,10 +5,12 @@ use std::sync::Arc;
 use axum::Router;
 use tokio::net::TcpListener;
 use tower_http::services::ServeDir;
+use url::Url;
 
 use crate::app_state::AppState;
 use crate::audio::AudioCapture;
 use crate::config::Config;
+use crate::radio::RadioHandle;
 use crate::server::router::api_router;
 use crate::Result;
 
@@ -21,6 +23,24 @@ pub async fn run(config: Config) -> Result<()> {
         config.radio.audio_device.as_deref().unwrap_or("default")
     );
     tracing::info!("configured users: {}", config.users.len());
+
+    // Connect to radio
+    let radio = match Url::parse(&config.radio.url) {
+        Ok(url) => match RadioHandle::connect(&url).await {
+            Ok(handle) => {
+                tracing::info!("radio connected");
+                Some(handle)
+            }
+            Err(e) => {
+                tracing::warn!("radio unavailable: {e}");
+                None
+            }
+        },
+        Err(e) => {
+            tracing::warn!("invalid radio URL: {e}");
+            None
+        }
+    };
 
     // Start audio capture
     let audio = match AudioCapture::start(
@@ -38,10 +58,7 @@ pub async fn run(config: Config) -> Result<()> {
         }
     };
 
-    let state = match audio {
-        Some(a) => AppState::with_audio(config.clone(), a),
-        None => AppState::new(config.clone()),
-    };
+    let state = AppState::new(config.clone(), audio, radio);
 
     let app = Router::new()
         .nest("/api", api_router(Arc::clone(&state)))

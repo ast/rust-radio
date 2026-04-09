@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::audio::AudioCapture;
 use crate::config::Config;
-use crate::radio::Controller;
+use crate::radio::{Controller, RadioHandle};
 use crate::session::SessionStore;
 
 pub struct AppState {
@@ -12,24 +12,21 @@ pub struct AppState {
     pub sessions: SessionStore,
     pub controller: Controller,
     pub audio: Option<AudioCapture>,
+    pub radio: Option<RadioHandle>,
 }
 
 impl AppState {
-    pub fn new(config: Config) -> Arc<Self> {
+    pub fn new(
+        config: Config,
+        audio: Option<AudioCapture>,
+        radio: Option<RadioHandle>,
+    ) -> Arc<Self> {
         Arc::new(Self {
             config,
             sessions: SessionStore::new(),
             controller: Controller::new(),
-            audio: None,
-        })
-    }
-
-    pub fn with_audio(config: Config, audio: AudioCapture) -> Arc<Self> {
-        Arc::new(Self {
-            config,
-            sessions: SessionStore::new(),
-            controller: Controller::new(),
-            audio: Some(audio),
+            audio,
+            radio,
         })
     }
 }

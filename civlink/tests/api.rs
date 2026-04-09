@@ -32,7 +32,7 @@ fn test_config() -> Config {
 }
 
 fn test_app() -> Router {
-    let state = AppState::new(test_config());
+    let state = AppState::new(test_config(), None, None);
     api_router(Arc::clone(&state))
 }
 

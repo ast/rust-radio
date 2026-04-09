@@ -3,7 +3,7 @@ listen_addr = "0.0.0.0:8080"
 frontend_dir = "frontend/dist"
 
 [radio]
-url = "tcp://shack:9000"
+url = "serial:///dev/ic-705a"
 audio_device = "USB Audio CODEC"
 sample_rate = 48000
 
