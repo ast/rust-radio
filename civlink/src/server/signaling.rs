@@ -6,6 +6,7 @@ use axum::extract::State;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
+use tokio_stream::StreamExt;
 use webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 
@@ -21,6 +22,9 @@ enum SignalingMessage {
     Answer(RTCSessionDescription),
     #[serde(rename = "ice-candidate")]
     IceCandidate(RTCIceCandidateInit),
+    /// Radio event forwarded as a pre-serialized JSON value.
+    #[serde(rename = "radio-event")]
+    RadioEvent(serde_json::Value),
 }
 
 pub async fn ws_handler(
@@ -54,17 +58,17 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
         }
     };
 
-    // Set up radio data channel if radio is connected
-    if let Some(radio) = state.radio.as_ref() {
-        // Subscribe before triggering reads so initial events are buffered
+    // Subscribe to radio events (if radio is connected)
+    let mut radio_events = if let Some(radio) = state.radio.as_ref() {
         let events = radio.event_stream();
-        webrtc_transport::data_channel::setup_radio_channel(&pc, events);
-
         // Trigger initial frequency/mode reads so the new client gets current state
         if let Err(e) = radio.read_initial_state().await {
             tracing::warn!("failed to read initial radio state: {e}");
         }
-    }
+        Some(events)
+    } else {
+        None
+    };
 
     // Set the remote description (client's offer)
     if let Err(e) = pc.set_remote_description(offer).await {
@@ -120,7 +124,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
         Box::pin(async {})
     }));
 
-    // Main signaling loop: handle incoming messages and forward ICE candidates
+    // Main loop: handle signaling, ICE candidates, and radio events
     loop {
         tokio::select! {
             // Incoming WebSocket message from client
@@ -163,6 +167,28 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                 if let Ok(json) = serde_json::to_string(&msg) {
                     if socket.send(Message::Text(json.into())).await.is_err() {
                         tracing::error!("failed to send ICE candidate to client");
+                        break;
+                    }
+                }
+            }
+            // Radio events to client
+            Some(event) = async {
+                match radio_events.as_mut() {
+                    Some(events) => events.next().await,
+                    None => std::future::pending().await,
+                }
+            } => {
+                let value = match serde_json::to_value(&event) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        tracing::error!("failed to serialize radio event: {e}");
+                        continue;
+                    }
+                };
+                let msg = SignalingMessage::RadioEvent(value);
+                if let Ok(json) = serde_json::to_string(&msg) {
+                    if socket.send(Message::Text(json.into())).await.is_err() {
+                        tracing::debug!("failed to send radio event, client disconnected");
                         break;
                     }
                 }

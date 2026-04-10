@@ -1,6 +1,6 @@
 import { SignalingClient } from "./signaling";
 import type { SignalingMessage } from "../types/messages";
-import type { ScopeFrame, RadioEvent } from "../types/radio";
+import type { ScopeFrame } from "../types/radio";
 
 export interface PeerConnectionResult {
   pc: RTCPeerConnection;
@@ -62,7 +62,7 @@ export async function createPeerConnection(
   let remoteDescriptionSet = false;
   const pendingCandidates: RTCIceCandidateInit[] = [];
 
-  // Handle incoming signaling messages
+  // Handle incoming signaling messages (including radio events)
   signaling.setOnMessage(async (msg: SignalingMessage) => {
     switch (msg.type) {
       case "answer":
@@ -85,6 +85,21 @@ export async function createPeerConnection(
           pendingCandidates.push(msg.payload);
         }
         break;
+      case "radio-event": {
+        const event = msg.payload;
+        switch (event.type) {
+          case "frequency":
+            if (freqHandler) freqHandler(event.data);
+            break;
+          case "mode":
+            if (modeHandler) modeHandler(event.data[0], event.data[1]);
+            break;
+          case "scope":
+            if (scopeHandler) scopeHandler(event.data);
+            break;
+        }
+        break;
+      }
       default:
         console.warn("[webrtc] unexpected message:", msg);
     }
@@ -105,29 +120,6 @@ export async function createPeerConnection(
 
   // We need to add a transceiver for receiving audio (recvonly)
   pc.addTransceiver("audio", { direction: "recvonly" });
-
-  // Client creates the "radio" data channel — server detects it and sends events on it
-  const radioChannel = pc.createDataChannel("radio");
-  radioChannel.onopen = () => console.log("[webrtc] radio data channel open");
-  radioChannel.onclose = () => console.log("[webrtc] radio data channel closed");
-  radioChannel.onmessage = (msgEvent) => {
-    try {
-      const event = JSON.parse(msgEvent.data) as RadioEvent;
-      switch (event.type) {
-        case "frequency":
-          if (freqHandler) freqHandler(event.data);
-          break;
-        case "mode":
-          if (modeHandler) modeHandler(event.data[0], event.data[1]);
-          break;
-        case "scope":
-          if (scopeHandler) scopeHandler(event.data);
-          break;
-      }
-    } catch (e) {
-      console.error("[webrtc] failed to parse radio event:", e, msgEvent.data);
-    }
-  };
 
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);

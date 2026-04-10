@@ -15,8 +15,10 @@ export class SignalingClient {
     };
 
     this.ws.onmessage = (event) => {
-      console.log("[signaling] received:", event.data);
       const msg: SignalingMessage = JSON.parse(event.data);
+      if (msg.type !== "radio-event") {
+        console.log("[signaling] received:", event.data);
+      }
       this.onMessage?.(msg);
     };
 
