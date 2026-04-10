@@ -1,12 +1,13 @@
 // Copyright SM6WJM 2026
 
 use async_trait::async_trait;
+use tokio::sync::mpsc;
 
 use crate::icom_civ::command::CivCommand;
 use crate::icom_civ::packet::CivPacket;
 use crate::traits::*;
 
-use super::{mode_from_civ, mode_to_civ, IcomRadio};
+use super::{mode_to_civ, IcomRadio};
 
 #[async_trait]
 impl Radio for IcomRadio {
@@ -18,15 +19,8 @@ impl Radio for IcomRadio {
         self.expect_ok(CivPacket::set_frequency(hz)).await
     }
 
-    async fn frequency(&self) -> Result<u64> {
-        match self.command(CivPacket::read_frequency()).await? {
-            CivCommand::TransceiverFreq(freq) => Ok(freq),
-            CivCommand::NotGood => Err(RadioError::CommandFailed),
-            other => Err(RadioError::Protocol(format!(
-                "expected frequency, got {:?}",
-                other
-            ))),
-        }
+    async fn read_frequency(&self) -> Result<()> {
+        self.send(CivPacket::read_frequency()).await
     }
 
     async fn set_mode(&self, mode: Mode) -> Result<()> {
@@ -34,15 +28,8 @@ impl Radio for IcomRadio {
             .await
     }
 
-    async fn mode(&self) -> Result<Mode> {
-        match self.command(CivPacket::read_mode()).await? {
-            CivCommand::TransceiverMode { mode, .. } => mode_from_civ(mode),
-            CivCommand::NotGood => Err(RadioError::CommandFailed),
-            other => Err(RadioError::Protocol(format!(
-                "expected mode, got {:?}",
-                other
-            ))),
-        }
+    async fn read_mode(&self) -> Result<()> {
+        self.send(CivPacket::read_mode()).await
     }
 
     async fn set_ptt(&self, active: bool) -> Result<()> {
@@ -58,5 +45,9 @@ impl Radio for IcomRadio {
                 other
             ))),
         }
+    }
+
+    fn take_event_stream(&self) -> Option<mpsc::Receiver<RadioEvent>> {
+        self.event_rx.lock().unwrap().take()
     }
 }

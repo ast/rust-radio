@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use thiserror::Error;
-use tokio_stream::Stream;
+use tokio::sync::mpsc;
 
 // ---------------------------------------------------------------------------
 // Error
@@ -89,6 +89,22 @@ pub struct ScopeFrame {
     pub bins: Vec<u8>,
 }
 
+/// Radio event — frequency changes, mode changes, scope data, and meter
+/// readings all arrive over the same link and are delivered through a
+/// single stream.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", content = "data")]
+#[serde(rename_all = "snake_case")]
+pub enum RadioEvent {
+    Frequency(u64),
+    Mode(Mode, u8),
+    Scope(ScopeFrame),
+    SignalMeter(u8),
+    RfPower(u8),
+    Swr(u8),
+    Alc(u8),
+}
+
 // ---------------------------------------------------------------------------
 // Core trait — every radio implements this
 // ---------------------------------------------------------------------------
@@ -103,13 +119,21 @@ pub trait Radio: Send + Sync {
     fn id(&self) -> &str;
 
     async fn set_frequency(&self, hz: u64) -> Result<()>;
-    async fn frequency(&self) -> Result<u64>;
+    /// Request a frequency reading. Result arrives as `RadioEvent::Frequency`.
+    async fn read_frequency(&self) -> Result<()>;
 
     async fn set_mode(&self, mode: Mode) -> Result<()>;
-    async fn mode(&self) -> Result<Mode>;
+    /// Request a mode reading. Result arrives as `RadioEvent::Mode`.
+    async fn read_mode(&self) -> Result<()>;
 
     async fn set_ptt(&self, active: bool) -> Result<()>;
     async fn ptt(&self) -> Result<bool>;
+
+    /// Take the event stream receiver. Returns `None` if already taken.
+    ///
+    /// This is a single-consumer stream — call it once and fan out in the
+    /// application layer if multiple consumers are needed.
+    fn take_event_stream(&self) -> Option<mpsc::Receiver<RadioEvent>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -127,27 +151,27 @@ pub trait RadioInfo: Radio {
 }
 
 /// Metering: S-meter, SWR, ALC, RF power.
+///
+/// Each method sends the read command to the radio. The result arrives
+/// asynchronously as a `RadioEvent` on the event stream.
 #[async_trait]
 pub trait RadioMeter: Radio {
-    /// S-meter reading (0–255 raw, mapping is radio-specific).
-    async fn signal_strength(&self) -> Result<u8>;
+    /// Request an S-meter reading. Result arrives as `RadioEvent::SignalMeter`.
+    async fn read_signal_strength(&self) -> Result<()>;
 
-    /// Standing wave ratio (None if not supported or not transmitting).
-    async fn swr(&self) -> Result<Option<f32>>;
+    /// Request a SWR reading. Result arrives as `RadioEvent::Swr`.
+    async fn read_swr(&self) -> Result<()>;
 
-    /// Automatic level control (None if not supported or not transmitting).
-    async fn alc(&self) -> Result<Option<f32>>;
+    /// Request an ALC reading. Result arrives as `RadioEvent::Alc`.
+    async fn read_alc(&self) -> Result<()>;
 
-    /// Forward RF power in watts (None if not supported or not transmitting).
-    async fn rf_power(&self) -> Result<Option<f32>>;
+    /// Request an RF power reading. Result arrives as `RadioEvent::RfPower`.
+    async fn read_rf_power(&self) -> Result<()>;
 }
 
 /// Spectrum scope / waterfall (e.g. IC-705 bandscope).
 #[async_trait]
 pub trait RadioScope: Radio {
-    /// Request a single scope frame.
-    async fn scope_data(&self) -> Result<ScopeFrame>;
-
-    /// Continuous stream of scope frames.
-    fn scope_stream(&self) -> Box<dyn Stream<Item = ScopeFrame> + Send + Unpin>;
+    /// Enable or disable scope waveform output on the radio.
+    async fn set_scope_output(&self, enable: bool) -> Result<()>;
 }

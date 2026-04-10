@@ -45,10 +45,10 @@ test-audio: build-pi
     scp {{target_dir}}/{{target_pi}}/release/{{binary}} {{remote}}:~/
     ssh {{remote}} "~/{{binary}} -c ~/{{config}} test-audio"
 
-# Test waterfall scope stream on the Pi (cross-compile, upload binary, run)
-test-waterfall: build-pi
+# Test radio event stream on the Pi (cross-compile, upload binary, run)
+test-events: build-pi
     scp {{target_dir}}/{{target_pi}}/release/{{binary}} {{remote}}:~/
-    ssh {{remote}} "~/{{binary}} -c ~/{{config}} test-waterfall"
+    ssh {{remote}} "~/{{binary}} -c ~/{{config}} test-events"
 
 # --- Local commands ---
 

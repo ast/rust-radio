@@ -10,10 +10,9 @@
 
 use anyhow::Result;
 use clap::Parser;
-use tokio_stream::StreamExt;
 use url::Url;
 
-use sidebridge::{IcomRadio, Radio, RadioMeter, RadioScope};
+use sidebridge::{IcomRadio, Radio, RadioEvent, RadioMeter, RadioScope};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Poll Icom radio frequency, S-meter, and scope via CI-V")]
@@ -32,31 +31,46 @@ async fn main() -> Result<()> {
     let url = Url::parse(&args.url)?;
     let radio = IcomRadio::connect(&url).await?;
 
-    let freq = radio.frequency().await?;
-    println!("Frequency: {} Hz", freq);
+    // Take the event stream before sending any read commands
+    let mut rx = radio
+        .take_event_stream()
+        .expect("event stream already taken");
 
-    let smeter = radio.signal_strength().await?;
-    println!("S-meter: {}", smeter);
+    // Request frequency and S-meter readings (results arrive as RadioEvents)
+    radio.read_frequency().await?;
+    radio.read_signal_strength().await?;
+
+    let timeout = std::time::Duration::from_secs(2);
+    for _ in 0..2 {
+        match tokio::time::timeout(timeout, rx.recv()).await {
+            Ok(Some(RadioEvent::Frequency(hz))) => println!("Frequency: {} Hz", hz),
+            Ok(Some(RadioEvent::SignalMeter(val))) => println!("S-meter: {}", val),
+            Ok(Some(event)) => println!("Event: {:?}", event),
+            Ok(None) => break,
+            Err(_) => break,
+        }
+    }
 
     if args.scope {
         eprintln!("Enabling scope and waveform data output...");
         radio.set_scope_output(true).await?;
 
-        let mut stream = radio.scope_stream();
         let mut frame_count = 0u64;
-        let timeout = std::time::Duration::from_secs(30);
+        let scope_timeout = std::time::Duration::from_secs(30);
 
-        while let Ok(Some(frame)) = tokio::time::timeout(timeout, stream.next()).await {
-            frame_count += 1;
-            println!(
-                "[frame {}] center={} Hz  span={} Hz  bins={}  min={}  max={}",
-                frame_count,
-                frame.center_hz,
-                frame.span_hz,
-                frame.bins.len(),
-                frame.bins.iter().min().unwrap_or(&0),
-                frame.bins.iter().max().unwrap_or(&0),
-            );
+        while let Ok(Some(event)) = tokio::time::timeout(scope_timeout, rx.recv()).await {
+            if let RadioEvent::Scope(frame) = event {
+                frame_count += 1;
+                println!(
+                    "[frame {}] center={} Hz  span={} Hz  bins={}  min={}  max={}",
+                    frame_count,
+                    frame.center_hz,
+                    frame.span_hz,
+                    frame.bins.len(),
+                    frame.bins.iter().min().unwrap_or(&0),
+                    frame.bins.iter().max().unwrap_or(&0),
+                );
+            }
         }
 
         eprintln!("Disabling scope waveform output...");

@@ -13,6 +13,9 @@ pub enum CivCommand {
     }, // 0x01, 0x04, 0x06
     SetPtt(bool),         // 0x1c 0x00
     SignalMeter(u8),      // 0x15 0x02
+    RfPower(u8),          // 0x15 0x11
+    Swr(u8),              // 0x15 0x12
+    Alc(u8),              // 0x15 0x13
     ScopeWave(ScopeWaveData),       // 0x27 0x00 — parsed waveform division
     ScopeSetting(ScopeSetting),     // 0x27 0x10-0x1E — parsed scope setting
     ScopeRaw {                      // 0x27 — fallback for unknown/failed parse

@@ -7,10 +7,10 @@ mod radio_scope;
 
 use bytes::Bytes;
 use futures::SinkExt;
+use std::sync::Mutex;
 use std::time::Duration;
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot};
 use tokio_stream::StreamExt;
-use tokio_stream::wrappers::BroadcastStream;
 use tokio_util::codec::Framed;
 use url::Url;
 
@@ -21,7 +21,7 @@ use crate::icom_civ::scope::ScopeAssembler;
 use crate::traits::*;
 use crate::Transport;
 
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
+pub(crate) const REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
 
 struct Request {
     payload: Bytes,
@@ -31,13 +31,15 @@ struct Request {
 /// Icom radio driver using the CI-V protocol over serial or TCP.
 ///
 /// Spawns a background I/O task that multiplexes command/response traffic
-/// with continuous scope waveform data.
+/// with continuous scope waveform and state data.
+///
+/// Unsolicited events (scope frames, frequency and mode changes) are delivered
+/// through a single `RadioEvent` channel. Call `take_event_stream()` once to
+/// consume it; fan-out to multiple listeners is the application's responsibility.
 pub struct IcomRadio {
     id: String,
     request_tx: mpsc::Sender<Request>,
-    pub(crate) scope_tx: broadcast::Sender<ScopeFrame>,
-    freq_tx: broadcast::Sender<u64>,
-    mode_tx: broadcast::Sender<(Mode, u8)>,
+    event_rx: Mutex<Option<mpsc::Receiver<RadioEvent>>>,
 }
 
 impl IcomRadio {
@@ -51,37 +53,16 @@ impl IcomRadio {
         let framed = Framed::new(transport, CivCodec);
 
         let (request_tx, request_rx) = mpsc::channel(16);
-        let (scope_tx, _) = broadcast::channel(64);
-        let (freq_tx, _) = broadcast::channel(16);
-        let (mode_tx, _) = broadcast::channel(16);
+        let (event_tx, event_rx) = mpsc::channel(64);
         let id = url.to_string();
 
-        tokio::spawn(Self::io_task(
-            framed,
-            request_rx,
-            scope_tx.clone(),
-            freq_tx.clone(),
-            mode_tx.clone(),
-        ));
+        tokio::spawn(Self::io_task(framed, request_rx, event_tx));
 
         Ok(Self {
             id,
             request_tx,
-            scope_tx,
-            freq_tx,
-            mode_tx,
+            event_rx: Mutex::new(Some(event_rx)),
         })
-    }
-
-    /// Enable or disable scope waveform output on the radio.
-    pub async fn set_scope_output(&self, enable: bool) -> Result<()> {
-        if enable {
-            self.expect_ok(CivPacket::scope_on_off(true)).await?;
-            self.expect_ok(CivPacket::scope_wave_output(true)).await?;
-        } else {
-            self.expect_ok(CivPacket::scope_wave_output(false)).await?;
-        }
-        Ok(())
     }
 
     /// Send a CI-V command and wait for the response.
@@ -110,44 +91,30 @@ impl IcomRadio {
         }
     }
 
-    /// Background task: reads CI-V frames and dispatches them.
+    /// Send a CI-V command without waiting for a response.
     ///
-    /// Scope waveform data is assembled and broadcast to subscribers.
-    /// All other responses are forwarded to the pending request caller.
-    /// Subscribe to frequency updates (both solicited and unsolicited).
-    pub fn freq_stream(
-        &self,
-    ) -> Box<dyn tokio_stream::Stream<Item = u64> + Send + Unpin> {
-        let rx = self.freq_tx.subscribe();
-        Box::new(tokio_stream::StreamExt::filter_map(
-            BroadcastStream::new(rx),
-            |r: std::result::Result<u64, _>| r.ok(),
-        ))
-    }
-
-    /// Subscribe to mode updates (both solicited and unsolicited).
-    /// Returns (Mode, filter_width) tuples.
-    pub fn mode_stream(
-        &self,
-    ) -> Box<dyn tokio_stream::Stream<Item = (Mode, u8)> + Send + Unpin> {
-        let rx = self.mode_tx.subscribe();
-        Box::new(tokio_stream::StreamExt::filter_map(
-            BroadcastStream::new(rx),
-            |r: std::result::Result<(Mode, u8), _>| r.ok(),
-        ))
+    /// Used for fire-and-forget reads where the response arrives as a
+    /// `RadioEvent` on the event stream.
+    pub(crate) async fn send(&self, packet: CivPacket) -> Result<()> {
+        let (response_tx, _) = oneshot::channel();
+        self.request_tx
+            .send(Request {
+                payload: packet.payload().into(),
+                response_tx,
+            })
+            .await
+            .map_err(|_| RadioError::Io(std::io::Error::other("driver task stopped")))?;
+        Ok(())
     }
 
     /// Background task: reads CI-V frames and dispatches them.
     ///
-    /// Scope waveform data is assembled and broadcast to subscribers.
-    /// Frequency updates are always broadcast (including unsolicited changes).
-    /// All other responses are forwarded to the pending request caller.
+    /// Unsolicited events (scope, frequency, mode) are sent through the
+    /// event channel. Command responses go to the pending oneshot caller.
     async fn io_task(
         mut framed: Framed<Transport, CivCodec>,
         mut request_rx: mpsc::Receiver<Request>,
-        scope_tx: broadcast::Sender<ScopeFrame>,
-        freq_tx: broadcast::Sender<u64>,
-        mode_tx: broadcast::Sender<(Mode, u8)>,
+        event_tx: mpsc::Sender<RadioEvent>,
     ) {
         let mut assembler = ScopeAssembler::new();
         let mut pending: Option<oneshot::Sender<Result<CivCommand>>> = None;
@@ -159,20 +126,34 @@ impl IcomRadio {
                         Some(Ok(frame)) => match frame.command {
                             CivCommand::ScopeWave(wave) => {
                                 if let Some(sf) = assembler.push(wave) {
-                                    let _ = scope_tx.send(sf);
+                                    let _ = event_tx.try_send(RadioEvent::Scope(sf));
                                 }
                             }
                             CivCommand::ScopeSetting(_) | CivCommand::ScopeRaw { .. } => {}
                             cmd => {
-                                // Broadcast frequency updates to all subscribers
-                                if let CivCommand::TransceiverFreq(freq) = &cmd {
-                                    let _ = freq_tx.send(*freq);
-                                }
-                                // Broadcast mode updates to all subscribers
-                                if let CivCommand::TransceiverMode { mode, filter } = &cmd {
-                                    if let Ok(m) = mode_from_civ(*mode) {
-                                        let _ = mode_tx.send((m, *filter));
+                                // Route events to the event channel
+                                match &cmd {
+                                    CivCommand::TransceiverFreq(freq) => {
+                                        let _ = event_tx.try_send(RadioEvent::Frequency(*freq));
                                     }
+                                    CivCommand::TransceiverMode { mode, filter } => {
+                                        if let Ok(m) = mode_from_civ(*mode) {
+                                            let _ = event_tx.try_send(RadioEvent::Mode(m, *filter));
+                                        }
+                                    }
+                                    CivCommand::SignalMeter(val) => {
+                                        let _ = event_tx.try_send(RadioEvent::SignalMeter(*val));
+                                    }
+                                    CivCommand::RfPower(val) => {
+                                        let _ = event_tx.try_send(RadioEvent::RfPower(*val));
+                                    }
+                                    CivCommand::Swr(val) => {
+                                        let _ = event_tx.try_send(RadioEvent::Swr(*val));
+                                    }
+                                    CivCommand::Alc(val) => {
+                                        let _ = event_tx.try_send(RadioEvent::Alc(*val));
+                                    }
+                                    _ => {}
                                 }
                                 if let Some(tx) = pending.take() {
                                     let _ = tx.send(Ok(cmd));

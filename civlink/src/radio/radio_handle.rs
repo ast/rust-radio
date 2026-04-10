@@ -84,6 +84,16 @@ impl RadioHandle {
         }))
     }
 
+    /// Trigger frequency and mode reads so current state is broadcast to all subscribers.
+    pub async fn read_initial_state(&self) -> Result<()> {
+        self.radio
+            .read_frequency()
+            .await
+            .map_err(CivlinkError::Radio)?;
+        self.radio.read_mode().await.map_err(CivlinkError::Radio)?;
+        Ok(())
+    }
+
     /// Get a shared reference to the underlying radio.
     pub fn radio(&self) -> Arc<IcomRadio> {
         Arc::clone(&self.radio)

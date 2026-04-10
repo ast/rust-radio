@@ -7,7 +7,8 @@ pub mod transport;
 
 // Trait and type re-exports
 pub use traits::{
-    Capabilities, Mode, Radio, RadioError, RadioInfo, RadioMeter, RadioScope, Result, ScopeFrame,
+    Capabilities, Mode, Radio, RadioError, RadioEvent, RadioInfo, RadioMeter, RadioScope, Result,
+    ScopeFrame,
 };
 
 // CI-V re-exports

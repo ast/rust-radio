@@ -89,6 +89,9 @@ fn parse_civ_command(cmd_byte: u8, data: &[u8]) -> CivCommand {
         // Sub-commands
         0x15 if !data.is_empty() => match data[0] {
             0x02 => CivCommand::SignalMeter(parse_bcd_u8(&data[1..])),
+            0x11 => CivCommand::RfPower(parse_bcd_u8(&data[1..])),
+            0x12 => CivCommand::Swr(parse_bcd_u8(&data[1..])),
+            0x13 => CivCommand::Alc(parse_bcd_u8(&data[1..])),
             _ => CivCommand::Unknown {
                 cmd: 0x15,
                 sub: Some(data[0]),

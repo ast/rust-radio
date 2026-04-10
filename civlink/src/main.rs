@@ -27,8 +27,8 @@ enum Command {
     UserList,
     /// Test audio capture (prints frame info and detects silence)
     TestAudio,
-    /// Test waterfall scope stream (prints scope frame info)
-    TestWaterfall,
+    /// Test radio event stream (prints all RadioEvents as JSON)
+    TestEvents,
 }
 
 #[tokio::main]
@@ -60,9 +60,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let config = civlink::Config::load(&cli.config)?;
             civlink::commands::test_audio::run(config).await?;
         }
-        Command::TestWaterfall => {
+        Command::TestEvents => {
             let config = civlink::Config::load(&cli.config)?;
-            civlink::commands::test_waterfall::run(config).await?;
+            civlink::commands::test_events::run(config).await?;
         }
     }
 
