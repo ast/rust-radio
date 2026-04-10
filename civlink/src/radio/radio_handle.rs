@@ -12,12 +12,10 @@ use crate::Result;
 use crate::error::CivlinkError;
 
 /// Wraps the sidebridge IcomRadio, fans out the single event stream
-/// to multiple broadcast subscribers (scope, freq, mode).
+/// to multiple broadcast subscribers.
 pub struct RadioHandle {
     radio: Arc<IcomRadio>,
-    scope_tx: broadcast::Sender<ScopeFrame>,
-    freq_tx: broadcast::Sender<u64>,
-    mode_tx: broadcast::Sender<(Mode, u8)>,
+    event_tx: broadcast::Sender<RadioEvent>,
 }
 
 impl RadioHandle {
@@ -35,71 +33,59 @@ impl RadioHandle {
             .take_event_stream()
             .expect("event stream not yet taken");
 
-        let (scope_tx, _) = broadcast::channel(64);
-        let (freq_tx, _) = broadcast::channel(16);
-        let (mode_tx, _) = broadcast::channel(16);
+        let (event_tx, _) = broadcast::channel(64);
 
-        // Spawn fan-out task: reads from single event stream, broadcasts to subscribers
-        let scope_tx_clone = scope_tx.clone();
-        let freq_tx_clone = freq_tx.clone();
-        let mode_tx_clone = mode_tx.clone();
-        tokio::spawn(Self::fan_out_task(
-            event_rx,
-            scope_tx_clone,
-            freq_tx_clone,
-            mode_tx_clone,
-        ));
+        // Spawn fan-out task: reads from single-consumer mpsc, broadcasts to all subscribers
+        let tx = event_tx.clone();
+        tokio::spawn(async move {
+            let mut rx = event_rx;
+            while let Some(event) = rx.recv().await {
+                let _ = tx.send(event);
+            }
+            tracing::info!("radio event stream ended, fan-out task stopping");
+        });
 
         Ok(Self {
             radio: Arc::new(radio),
-            scope_tx,
-            freq_tx,
-            mode_tx,
+            event_tx,
         })
     }
 
-    /// Get a new scope frame stream. Each caller gets an independent subscriber.
-    pub fn scope_stream(&self) -> Box<dyn Stream<Item = ScopeFrame> + Send + Unpin> {
-        let rx = self.scope_tx.subscribe();
+    /// Get a new stream of all radio events. Each caller gets an independent subscriber.
+    pub fn event_stream(&self) -> Box<dyn Stream<Item = RadioEvent> + Send + Unpin> {
+        let rx = self.event_tx.subscribe();
         Box::new(BroadcastStream::new(rx).filter_map(|r| r.ok()))
+    }
+
+    /// Get a new scope frame stream.
+    pub fn scope_stream(&self) -> Box<dyn Stream<Item = ScopeFrame> + Send + Unpin> {
+        let rx = self.event_tx.subscribe();
+        Box::new(BroadcastStream::new(rx).filter_map(|r| match r {
+            Ok(RadioEvent::Scope(frame)) => Some(frame),
+            _ => None,
+        }))
     }
 
     /// Get a new frequency update stream.
     pub fn freq_stream(&self) -> Box<dyn Stream<Item = u64> + Send + Unpin> {
-        let rx = self.freq_tx.subscribe();
-        Box::new(BroadcastStream::new(rx).filter_map(|r| r.ok()))
+        let rx = self.event_tx.subscribe();
+        Box::new(BroadcastStream::new(rx).filter_map(|r| match r {
+            Ok(RadioEvent::Frequency(hz)) => Some(hz),
+            _ => None,
+        }))
     }
 
     /// Get a new mode update stream.
     pub fn mode_stream(&self) -> Box<dyn Stream<Item = (Mode, u8)> + Send + Unpin> {
-        let rx = self.mode_tx.subscribe();
-        Box::new(BroadcastStream::new(rx).filter_map(|r| r.ok()))
+        let rx = self.event_tx.subscribe();
+        Box::new(BroadcastStream::new(rx).filter_map(|r| match r {
+            Ok(RadioEvent::Mode(m, f)) => Some((m, f)),
+            _ => None,
+        }))
     }
 
     /// Get a shared reference to the underlying radio.
     pub fn radio(&self) -> Arc<IcomRadio> {
         Arc::clone(&self.radio)
-    }
-
-    async fn fan_out_task(
-        mut event_rx: tokio::sync::mpsc::Receiver<RadioEvent>,
-        scope_tx: broadcast::Sender<ScopeFrame>,
-        freq_tx: broadcast::Sender<u64>,
-        mode_tx: broadcast::Sender<(Mode, u8)>,
-    ) {
-        while let Some(event) = event_rx.recv().await {
-            match event {
-                RadioEvent::Scope(frame) => {
-                    let _ = scope_tx.send(frame);
-                }
-                RadioEvent::Frequency(hz) => {
-                    let _ = freq_tx.send(hz);
-                }
-                RadioEvent::Mode(mode, filter) => {
-                    let _ = mode_tx.send((mode, filter));
-                }
-            }
-        }
-        tracing::info!("radio event stream ended, fan-out task stopping");
     }
 }

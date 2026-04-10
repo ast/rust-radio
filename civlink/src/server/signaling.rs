@@ -54,32 +54,16 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
         }
     };
 
-    // Set up radio data channels if radio is connected
-    if let Some(ref handle) = state.radio {
-        let radio = handle.radio();
-
-        let s1 = Arc::clone(&state);
-        let s2 = Arc::clone(&state);
-        let s3 = Arc::clone(&state);
-
-        if let Err(e) = webrtc_transport::data_channel::setup_state_channel(
+    // Set up radio data channel if radio is connected
+    if state.radio.is_some() {
+        let s = Arc::clone(&state);
+        if let Err(e) = webrtc_transport::data_channel::setup_radio_channel(
             &pc,
-            radio,
-            move || s1.radio.as_ref().unwrap().freq_stream(),
-            move || s2.radio.as_ref().unwrap().mode_stream(),
+            move || s.radio.as_ref().unwrap().event_stream(),
         )
         .await
         {
-            tracing::warn!("failed to set up state data channel: {e}");
-        }
-
-        if let Err(e) = webrtc_transport::data_channel::setup_spectrum_channel(
-            &pc,
-            move || s3.radio.as_ref().unwrap().scope_stream(),
-        )
-        .await
-        {
-            tracing::warn!("failed to set up spectrum data channel: {e}");
+            tracing::warn!("failed to set up radio data channel: {e}");
         }
     }
 

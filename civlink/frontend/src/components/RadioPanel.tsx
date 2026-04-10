@@ -14,7 +14,6 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
   const [audioEl, setAudioEl] = createSignal<HTMLAudioElement | undefined>();
   const [audioBlocked, setAudioBlocked] = createSignal(false);
   const [bins, setBins] = createSignal<number[]>([]);
-  const [hasSpectrum, setHasSpectrum] = createSignal(false);
   const [frequency, setFrequency] = createSignal(0);
   const [mode, setMode] = createSignal("USB");
   let conn: PeerConnectionResult | undefined;
@@ -46,12 +45,14 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
 
       result.onScopeFrame((frame) => {
         setBins(frame.bins);
-        if (!hasSpectrum()) setHasSpectrum(true);
       });
 
-      result.onRadioState((state) => {
-        setFrequency(state.frequency);
-        setMode(state.mode);
+      result.onFrequency((hz) => {
+        setFrequency(hz);
+      });
+
+      result.onMode((m) => {
+        setMode(m);
       });
 
       result.pc.onconnectionstatechange = () => {
@@ -85,10 +86,6 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
     }
   };
 
-  const restartWaterfall = () => {
-    conn?.restartSpectrum();
-  };
-
   return (
     <div class="radio-panel">
       <div class="connection-status">
@@ -102,9 +99,6 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
       </div>
       <VfoDisplay frequency={frequency()} mode={mode()} />
       <Spectrum bins={bins()} />
-      {connected() && !hasSpectrum() && (
-        <button class="waterfall-restart-btn" onClick={restartWaterfall}>Restart Waterfall</button>
-      )}
       {audioBlocked() ? (
         <button class="audio-start-btn" onClick={resumeAudio}>Start Audio</button>
       ) : (

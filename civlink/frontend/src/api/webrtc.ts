@@ -1,14 +1,14 @@
 import { SignalingClient } from "./signaling";
 import type { SignalingMessage } from "../types/messages";
-import type { RadioState, ScopeFrame } from "../types/radio";
+import type { ScopeFrame, RadioEvent } from "../types/radio";
 
 export interface PeerConnectionResult {
   pc: RTCPeerConnection;
   audioElement: HTMLAudioElement;
   signaling: SignalingClient;
   onScopeFrame: (handler: (frame: ScopeFrame) => void) => void;
-  onRadioState: (handler: (state: RadioState) => void) => void;
-  restartSpectrum: () => void;
+  onFrequency: (handler: (hz: number) => void) => void;
+  onMode: (handler: (mode: string, filter: number) => void) => void;
 }
 
 export async function createPeerConnection(
@@ -26,8 +26,8 @@ export async function createPeerConnection(
 
   // Radio data handlers — set by the caller
   let scopeHandler: ((frame: ScopeFrame) => void) | null = null;
-  let stateHandler: ((state: RadioState) => void) | null = null;
-  let spectrumChannel: RTCDataChannel | null = null;
+  let freqHandler: ((hz: number) => void) | null = null;
+  let modeHandler: ((mode: string, filter: number) => void) | null = null;
 
   // Handle remote tracks (audio from radio)
   pc.ontrack = (event) => {
@@ -47,25 +47,23 @@ export async function createPeerConnection(
     const dc = event.channel;
     console.log(`[webrtc] data channel received: ${dc.label}`);
 
-    if (dc.label === "state") {
+    if (dc.label === "radio") {
       dc.onmessage = (msgEvent) => {
         try {
-          const state = JSON.parse(msgEvent.data) as RadioState;
-          if (stateHandler) stateHandler(state);
+          const event = JSON.parse(msgEvent.data) as RadioEvent;
+          switch (event.type) {
+            case "frequency":
+              if (freqHandler) freqHandler(event.data);
+              break;
+            case "mode":
+              if (modeHandler) modeHandler(event.data[0], event.data[1]);
+              break;
+            case "scope":
+              if (scopeHandler) scopeHandler(event.data);
+              break;
+          }
         } catch (e) {
-          console.error("[webrtc] failed to parse state message:", e);
-        }
-      };
-    }
-
-    if (dc.label === "spectrum") {
-      spectrumChannel = dc;
-      dc.onmessage = (msgEvent) => {
-        try {
-          const frame = JSON.parse(msgEvent.data) as ScopeFrame;
-          if (scopeHandler) scopeHandler(frame);
-        } catch (e) {
-          console.error("[webrtc] failed to parse spectrum message:", e);
+          console.error("[webrtc] failed to parse radio event:", e);
         }
       };
     }
@@ -149,14 +147,7 @@ export async function createPeerConnection(
     audioElement,
     signaling,
     onScopeFrame: (handler) => { scopeHandler = handler; },
-    onRadioState: (handler) => { stateHandler = handler; },
-    restartSpectrum: () => {
-      if (spectrumChannel && spectrumChannel.readyState === "open") {
-        console.log("[webrtc] requesting spectrum restart");
-        spectrumChannel.send("restart");
-      } else {
-        console.warn("[webrtc] spectrum channel not open, cannot restart");
-      }
-    },
+    onFrequency: (handler) => { freqHandler = handler; },
+    onMode: (handler) => { modeHandler = handler; },
   };
 }
