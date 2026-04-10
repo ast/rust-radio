@@ -2,7 +2,7 @@ import { type Component, createSignal, onMount, onCleanup } from "solid-js";
 import VfoDisplay from "./VfoDisplay";
 import Spectrum from "./Spectrum";
 import AudioControls from "./AudioControls";
-import { createPeerConnection } from "../api/webrtc";
+import { createPeerConnection, type PeerConnectionResult } from "../api/webrtc";
 
 interface RadioPanelProps {
   token: string;
@@ -12,20 +12,41 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
   const [connected, setConnected] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const [audioEl, setAudioEl] = createSignal<HTMLAudioElement | undefined>();
+  const [audioBlocked, setAudioBlocked] = createSignal(false);
   const [bins, setBins] = createSignal<number[]>([]);
+  const [hasSpectrum, setHasSpectrum] = createSignal(false);
   const [frequency, setFrequency] = createSignal(0);
   const [mode, setMode] = createSignal("USB");
-  let pc: RTCPeerConnection | undefined;
+  let conn: PeerConnectionResult | undefined;
 
-  onMount(async () => {
+  const disconnect = () => {
+    console.log("[radio-panel] disconnecting");
+    conn?.signaling.close();
+    conn?.pc.close();
+    conn = undefined;
+  };
+
+  const connect = async () => {
+    disconnect();
+    setConnected(false);
+    setError(null);
     try {
       console.log("[radio-panel] establishing WebRTC connection");
       const result = await createPeerConnection(props.token);
-      pc = result.pc;
+      conn = result;
       setAudioEl(result.audioElement);
+
+      // Try to start audio — may be blocked by autoplay policy
+      result.audioElement.play().then(() => {
+        setAudioBlocked(false);
+      }).catch(() => {
+        console.warn("[radio-panel] autoplay blocked, user interaction required");
+        setAudioBlocked(true);
+      });
 
       result.onScopeFrame((frame) => {
         setBins(frame.bins);
+        if (!hasSpectrum()) setHasSpectrum(true);
       });
 
       result.onRadioState((state) => {
@@ -33,10 +54,10 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
         setMode(state.mode);
       });
 
-      pc.onconnectionstatechange = () => {
-        console.log(`[radio-panel] connection state: ${pc!.connectionState}`);
-        setConnected(pc!.connectionState === "connected");
-        if (pc!.connectionState === "failed") {
+      result.pc.onconnectionstatechange = () => {
+        console.log(`[radio-panel] connection state: ${result.pc.connectionState}`);
+        setConnected(result.pc.connectionState === "connected");
+        if (result.pc.connectionState === "failed") {
           setError("Connection failed");
         }
       };
@@ -44,12 +65,29 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
       console.error("[radio-panel] failed to connect:", e);
       setError("Failed to establish connection");
     }
-  });
+  };
+
+  onMount(connect);
+
+  // Clean up on beforeunload (page reload/close) and component unmount
+  const onBeforeUnload = () => disconnect();
+  window.addEventListener("beforeunload", onBeforeUnload);
 
   onCleanup(() => {
-    console.log("[radio-panel] cleaning up");
-    pc?.close();
+    window.removeEventListener("beforeunload", onBeforeUnload);
+    disconnect();
   });
+
+  const resumeAudio = () => {
+    const el = audioEl();
+    if (el) {
+      el.play().then(() => setAudioBlocked(false)).catch(() => {});
+    }
+  };
+
+  const restartWaterfall = () => {
+    conn?.restartSpectrum();
+  };
 
   return (
     <div class="radio-panel">
@@ -64,7 +102,14 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
       </div>
       <VfoDisplay frequency={frequency()} mode={mode()} />
       <Spectrum bins={bins()} />
-      <AudioControls audioElement={audioEl()} />
+      {connected() && !hasSpectrum() && (
+        <button class="waterfall-restart-btn" onClick={restartWaterfall}>Restart Waterfall</button>
+      )}
+      {audioBlocked() ? (
+        <button class="audio-start-btn" onClick={resumeAudio}>Start Audio</button>
+      ) : (
+        <AudioControls audioElement={audioEl()} />
+      )}
     </div>
   );
 };

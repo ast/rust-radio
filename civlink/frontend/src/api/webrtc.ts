@@ -5,8 +5,10 @@ import type { RadioState, ScopeFrame } from "../types/radio";
 export interface PeerConnectionResult {
   pc: RTCPeerConnection;
   audioElement: HTMLAudioElement;
+  signaling: SignalingClient;
   onScopeFrame: (handler: (frame: ScopeFrame) => void) => void;
   onRadioState: (handler: (state: RadioState) => void) => void;
+  restartSpectrum: () => void;
 }
 
 export async function createPeerConnection(
@@ -25,6 +27,7 @@ export async function createPeerConnection(
   // Radio data handlers — set by the caller
   let scopeHandler: ((frame: ScopeFrame) => void) | null = null;
   let stateHandler: ((state: RadioState) => void) | null = null;
+  let spectrumChannel: RTCDataChannel | null = null;
 
   // Handle remote tracks (audio from radio)
   pc.ontrack = (event) => {
@@ -32,6 +35,10 @@ export async function createPeerConnection(
     if (event.streams.length > 0) {
       audioElement.srcObject = event.streams[0];
       console.log("[webrtc] audio stream attached to audio element");
+      // Handle autoplay policy — browsers block autoplay without user gesture
+      audioElement.play().catch((e) => {
+        console.warn("[webrtc] autoplay blocked, waiting for user interaction:", e);
+      });
     }
   };
 
@@ -52,6 +59,7 @@ export async function createPeerConnection(
     }
 
     if (dc.label === "spectrum") {
+      spectrumChannel = dc;
       dc.onmessage = (msgEvent) => {
         try {
           const frame = JSON.parse(msgEvent.data) as ScopeFrame;
@@ -79,16 +87,32 @@ export async function createPeerConnection(
     console.log(`[webrtc] connection state: ${pc.connectionState}`);
   };
 
+  // Buffer ICE candidates until remote description is set
+  let remoteDescriptionSet = false;
+  const pendingCandidates: RTCIceCandidateInit[] = [];
+
   // Handle incoming signaling messages
-  signaling.setOnMessage((msg: SignalingMessage) => {
+  signaling.setOnMessage(async (msg: SignalingMessage) => {
     switch (msg.type) {
       case "answer":
         console.log("[webrtc] received SDP answer");
-        pc.setRemoteDescription(new RTCSessionDescription(msg.payload));
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.payload));
+        remoteDescriptionSet = true;
+        // Flush buffered ICE candidates
+        for (const candidate of pendingCandidates) {
+          console.log(`[webrtc] adding buffered ICE candidate: ${candidate.candidate}`);
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+        pendingCandidates.length = 0;
         break;
       case "ice-candidate":
-        console.log(`[webrtc] received ICE candidate: ${msg.payload.candidate}`);
-        pc.addIceCandidate(new RTCIceCandidate(msg.payload));
+        if (remoteDescriptionSet) {
+          console.log(`[webrtc] received ICE candidate: ${msg.payload.candidate}`);
+          await pc.addIceCandidate(new RTCIceCandidate(msg.payload));
+        } else {
+          console.log(`[webrtc] buffering ICE candidate (no remote desc yet): ${msg.payload.candidate}`);
+          pendingCandidates.push(msg.payload);
+        }
         break;
       default:
         console.warn("[webrtc] unexpected message:", msg);
@@ -123,7 +147,16 @@ export async function createPeerConnection(
   return {
     pc,
     audioElement,
+    signaling,
     onScopeFrame: (handler) => { scopeHandler = handler; },
     onRadioState: (handler) => { stateHandler = handler; },
+    restartSpectrum: () => {
+      if (spectrumChannel && spectrumChannel.readyState === "open") {
+        console.log("[webrtc] requesting spectrum restart");
+        spectrumChannel.send("restart");
+      } else {
+        console.warn("[webrtc] spectrum channel not open, cannot restart");
+      }
+    },
   };
 }

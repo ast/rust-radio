@@ -15,7 +15,7 @@ build-pi:
 
 # Build frontend
 build-frontend:
-    cd frontend && npm run build
+    cd frontend && npm install && npm run build
 
 # Create a tarball with binary, frontend, and config
 bundle: build

@@ -34,7 +34,11 @@ pub async fn ws_handler(
 }
 
 async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
-    tracing::info!("WebSocket connection established, waiting for offer");
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SESSION_COUNTER: AtomicU64 = AtomicU64::new(0);
+    let sid = SESSION_COUNTER.fetch_add(1, Ordering::Relaxed);
+
+    tracing::info!(sid, "WebSocket connection established, waiting for offer");
 
     // Wait for the client's offer
     let Some(offer) = wait_for_offer(&mut socket).await else {
@@ -129,7 +133,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
 
     // Connection state logging
     pc.on_peer_connection_state_change(Box::new(move |state| {
-        tracing::info!("peer connection state: {state}");
+        tracing::info!(sid, "peer connection state: {state}");
         Box::pin(async {})
     }));
 
@@ -185,9 +189,9 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
 
     // Cleanup
     if let Err(e) = pc.close().await {
-        tracing::error!("failed to close peer connection: {e}");
+        tracing::error!(sid, "failed to close peer connection: {e}");
     }
-    tracing::info!("signaling session ended");
+    tracing::info!(sid, "signaling session ended");
 }
 
 async fn wait_for_offer(socket: &mut WebSocket) -> Option<RTCSessionDescription> {

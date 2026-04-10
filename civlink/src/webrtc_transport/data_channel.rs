@@ -1,16 +1,19 @@
 // Copyright SM6WJM 2026
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use serde::Serialize;
 use sidebridge::{IcomRadio, Mode, Radio, ScopeFrame};
+use tokio::sync::{Notify, oneshot};
 use tokio_stream::{Stream, StreamExt};
-use webrtc::data_channel::data_channel_state::RTCDataChannelState;
 use webrtc::peer_connection::RTCPeerConnection;
 
 use crate::Result;
 use crate::error::CivlinkError;
+
+static CONNECTION_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 // ---------------------------------------------------------------------------
 // State channel — frequency, mode, filter as a maintained struct
@@ -37,11 +40,14 @@ pub async fn setup_state_channel(
         .await
         .map_err(|e| CivlinkError::WebRtc(format!("failed to create state channel: {e}")))?;
 
+    let cid = CONNECTION_COUNTER.fetch_add(1, Ordering::Relaxed);
+
     tokio::spawn(async move {
         if !wait_for_open(&dc).await {
+            tracing::warn!(cid, "state data channel failed to open");
             return;
         }
-        tracing::info!("state data channel open");
+        tracing::info!(cid, "state data channel open");
 
         // Read initial state from the radio
         let freq = radio.frequency().await.unwrap_or(0);
@@ -58,21 +64,24 @@ pub async fn setup_state_channel(
 
         // Send initial state
         if let Ok(json) = serde_json::to_string(&state) {
-            let _ = dc.send_text(json).await;
+            if let Err(e) = dc.send_text(json).await {
+                tracing::error!(cid, "initial state send failed: {e}");
+            }
         }
 
         // Subscribe after channel open and initial state sent
         let freq_stream = subscribe_freq();
         let mode_stream = subscribe_mode();
 
-        pump_state(dc, &mut state, freq_stream, mode_stream).await;
-        tracing::info!("state data channel closed");
+        pump_state(cid, dc, &mut state, freq_stream, mode_stream).await;
+        tracing::info!(cid, "state data channel closed");
     });
 
     Ok(())
 }
 
 async fn pump_state(
+    cid: u64,
     dc: Arc<webrtc::data_channel::RTCDataChannel>,
     state: &mut RadioState,
     mut freq: Box<dyn Stream<Item = u64> + Send + Unpin>,
@@ -87,16 +96,20 @@ async fn pump_state(
                 state.mode = m.to_string();
                 state.filter = f;
             }
-            else => break,
+            else => {
+                tracing::debug!(cid, "state pump: all streams ended");
+                break;
+            }
         };
         let json = match serde_json::to_string(&state) {
             Ok(j) => j,
             Err(e) => {
-                tracing::error!("failed to serialize radio state: {e}");
+                tracing::error!(cid, "failed to serialize radio state: {e}");
                 continue;
             }
         };
-        if dc.send_text(json).await.is_err() {
+        if let Err(e) = dc.send_text(json).await {
+            tracing::debug!(cid, "state pump: send failed: {e}");
             break;
         }
     }
@@ -107,43 +120,89 @@ async fn pump_state(
 // ---------------------------------------------------------------------------
 
 /// Create a "spectrum" data channel that streams scope frames.
+///
+/// The client can send any message on this channel to trigger a resubscribe
+/// to the scope stream (e.g. if the waterfall stopped updating).
 pub async fn setup_spectrum_channel(
     pc: &Arc<RTCPeerConnection>,
-    subscribe: impl FnOnce() -> Box<dyn Stream<Item = ScopeFrame> + Send + Unpin> + Send + 'static,
+    subscribe: impl Fn() -> Box<dyn Stream<Item = ScopeFrame> + Send + Unpin> + Send + 'static,
 ) -> Result<()> {
     let dc = pc
         .create_data_channel("spectrum", None)
         .await
         .map_err(|e| CivlinkError::WebRtc(format!("failed to create spectrum channel: {e}")))?;
 
+    let cid = CONNECTION_COUNTER.fetch_add(1, Ordering::Relaxed);
+
+    // Signal from on_message handler to the pump loop
+    let restart = Arc::new(Notify::new());
+    let restart_clone = Arc::clone(&restart);
+    dc.on_message(Box::new(move |_msg| {
+        tracing::info!(cid, "spectrum restart requested by client");
+        restart_clone.notify_one();
+        Box::pin(async {})
+    }));
+
     tokio::spawn(async move {
         if !wait_for_open(&dc).await {
+            tracing::warn!(cid, "spectrum data channel failed to open");
             return;
         }
-        tracing::info!("spectrum data channel open");
+        tracing::info!(cid, "spectrum data channel open");
 
-        let scope_stream = subscribe();
-        pump_spectrum(dc, scope_stream).await;
-        tracing::info!("spectrum data channel closed");
+        loop {
+            let mut scope = subscribe();
+            let reason = pump_spectrum(cid, &dc, &mut scope, &restart).await;
+            match reason {
+                PumpExit::Restart => {
+                    tracing::info!(cid, "spectrum pump restarting");
+                    continue;
+                }
+                PumpExit::SendFailed | PumpExit::StreamEnded => {
+                    tracing::info!(cid, "spectrum data channel closed ({reason:?})");
+                    break;
+                }
+            }
+        }
     });
 
     Ok(())
 }
 
+#[derive(Debug)]
+enum PumpExit {
+    Restart,
+    SendFailed,
+    StreamEnded,
+}
+
 async fn pump_spectrum(
-    dc: Arc<webrtc::data_channel::RTCDataChannel>,
-    mut scope: Box<dyn Stream<Item = ScopeFrame> + Send + Unpin>,
-) {
-    while let Some(frame) = scope.next().await {
-        let json = match serde_json::to_string(&frame) {
-            Ok(j) => j,
-            Err(e) => {
-                tracing::error!("failed to serialize scope frame: {e}");
-                continue;
+    cid: u64,
+    dc: &Arc<webrtc::data_channel::RTCDataChannel>,
+    scope: &mut (dyn Stream<Item = ScopeFrame> + Send + Unpin),
+    restart: &Notify,
+) -> PumpExit {
+    loop {
+        tokio::select! {
+            frame = scope.next() => {
+                let Some(frame) = frame else {
+                    return PumpExit::StreamEnded;
+                };
+                let json = match serde_json::to_string(&frame) {
+                    Ok(j) => j,
+                    Err(e) => {
+                        tracing::error!(cid, "failed to serialize scope frame: {e}");
+                        continue;
+                    }
+                };
+                if let Err(e) = dc.send_text(json).await {
+                    tracing::debug!(cid, "spectrum pump: send failed: {e}");
+                    return PumpExit::SendFailed;
+                }
             }
-        };
-        if dc.send_text(json).await.is_err() {
-            break;
+            _ = restart.notified() => {
+                return PumpExit::Restart;
+            }
         }
     }
 }
@@ -152,13 +211,27 @@ async fn pump_spectrum(
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Poll the data channel until it opens (or closes/fails).
+/// Wait for the data channel to open using the `on_open` callback.
+///
+/// Unlike polling `ready_state()`, `on_open` handles the case where the
+/// channel is already open when the callback is registered, and avoids
+/// missing fast state transitions. A 15-second timeout prevents hanging
+/// if the SCTP association fails to establish.
 async fn wait_for_open(dc: &Arc<webrtc::data_channel::RTCDataChannel>) -> bool {
-    loop {
-        match dc.ready_state() {
-            RTCDataChannelState::Open => return true,
-            RTCDataChannelState::Closing | RTCDataChannelState::Closed => return false,
-            _ => tokio::time::sleep(Duration::from_millis(50)).await,
+    let (tx, rx) = oneshot::channel::<()>();
+    dc.on_open(Box::new(move || {
+        let _ = tx.send(());
+        Box::pin(async {})
+    }));
+    match tokio::time::timeout(Duration::from_secs(15), rx).await {
+        Ok(Ok(())) => true,
+        Ok(Err(_)) => {
+            tracing::warn!("data channel on_open sender dropped before firing");
+            false
+        }
+        Err(_) => {
+            tracing::warn!("data channel open timed out after 15s");
+            false
         }
     }
 }

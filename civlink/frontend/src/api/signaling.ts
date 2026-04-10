@@ -2,7 +2,7 @@ import type { SignalingMessage } from "../types/messages";
 
 export class SignalingClient {
   private ws: WebSocket | null = null;
-  private onMessage: ((msg: SignalingMessage) => void) | null = null;
+  private onMessage: ((msg: SignalingMessage) => void | Promise<void>) | null = null;
 
   connect(token: string): void {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -34,7 +34,7 @@ export class SignalingClient {
     this.ws?.send(JSON.stringify(msg));
   }
 
-  setOnMessage(handler: (msg: SignalingMessage) => void): void {
+  setOnMessage(handler: (msg: SignalingMessage) => void | Promise<void>): void {
     this.onMessage = handler;
   }
 

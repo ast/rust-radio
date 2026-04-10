@@ -7,9 +7,9 @@ interface SpectrumProps {
 const CANVAS_WIDTH = 800;
 const SPECTRUM_HEIGHT = 100;
 const WATERFALL_HEIGHT = 300;
-const BG_COLOR = "#0f0f23";
-const LINE_COLOR = "#00d4ff";
-const FILL_COLOR = "rgba(0, 212, 255, 0.15)";
+const BG_COLOR = "#0a0a0a";
+const LINE_COLOR = "#4dabf5";
+const FILL_COLOR = "rgba(77, 171, 245, 0.1)";
 // IC-705 scope bins range 0-160
 const BIN_MAX = 160;
 
