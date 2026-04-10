@@ -40,6 +40,11 @@ run args="": stop
 deploy args="": upload stop
     ssh {{remote}} "RUST_LOG=civlink=debug ~/{{binary}} -c ~/{{config}} serve {{args}}"
 
+# Test audio capture on the Pi (cross-compile, upload binary, run)
+test-audio: build-pi
+    scp {{target_dir}}/{{target_pi}}/release/{{binary}} {{remote}}:~/
+    ssh {{remote}} "~/{{binary}} -c ~/{{config}} test-audio"
+
 # --- Local commands ---
 
 # Build and run locally

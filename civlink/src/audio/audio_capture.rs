@@ -3,13 +3,11 @@
 use bytes::Bytes;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{SampleFormat, StreamConfig};
-use opus::{Application, Channels, Encoder};
-use ringbuf::HeapRb;
-use ringbuf::traits::{Consumer, Producer, Split};
+use doublemap::ring_buffer_pair;
+use opus::Channels;
 use tokio::sync::broadcast;
 
-use crate::error::CivlinkError;
-use crate::Result;
+use super::audio_encoder::AudioEncoder;
 
 /// An Opus-encoded audio frame with its duration.
 #[derive(Clone, Debug)]
@@ -17,6 +15,8 @@ pub struct AudioFrame {
     pub data: Bytes,
     pub duration_ms: u32,
 }
+use crate::error::CivlinkError;
+use crate::Result;
 
 /// Captures audio from a cpal device, encodes with Opus, and broadcasts
 /// encoded frames to all subscribers via a tokio broadcast channel.
@@ -51,6 +51,12 @@ impl AudioCapture {
         let sample_format = default_config.sample_format();
         tracing::debug!("default input config: {default_config:?}");
 
+        if sample_format != SampleFormat::I16 {
+            return Err(CivlinkError::Audio(format!(
+                "unsupported sample format: {sample_format:?} (expected I16)"
+            )));
+        }
+
         let config = StreamConfig {
             channels,
             sample_rate,
@@ -66,61 +72,44 @@ impl AudioCapture {
         // 20ms frame size: (sample_rate / 1000) * 20
         let frame_size = (sample_rate as usize / 1000) * 20;
         let ch = channels as usize;
+        let frame_samples = frame_size * ch;
 
         tracing::info!(
-            "audio capture: {}Hz, {} ch, format={:?}, frame_size={} samples",
+            "audio capture: {}Hz, {} ch, frame_size={} samples",
             sample_rate,
             channels,
-            sample_format,
             frame_size
         );
 
-        // Ring buffer: 10 frames of headroom
-        let rb = HeapRb::<f32>::new(frame_size * ch * 10);
-        let (mut producer, mut consumer) = rb.split();
+        // Ring buffer: producer_required=1 so cpal callback only blocks when
+        // completely full (effectively non-blocking with 8x headroom).
+        // consumer_required=frame_samples so encoder wakes per opus frame.
+        let (producer, consumer) = ring_buffer_pair::<f32>(1, frame_samples);
 
         // Broadcast channel for encoded frames (capacity for ~500ms of audio at 20ms frames)
         let (tx, _) = broadcast::channel::<AudioFrame>(25);
         let tx_clone = tx.clone();
 
-        // Build the cpal input stream, converting to f32 regardless of device format
-        let stream = match sample_format {
-            SampleFormat::F32 => device
-                .build_input_stream(
-                    &config,
-                    move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                        let n = producer.push_slice(data);
-                        if n < data.len() {
-                            tracing::warn!("audio ring buffer overflow: dropped {} samples", data.len() - n);
+        let stream = device
+            .build_input_stream(
+                &config,
+                move |data: &[i16], _: &cpal::InputCallbackInfo| {
+                    let result = producer.produce(|slice| {
+                        for (out, &s) in slice.iter_mut().zip(data) {
+                            *out = s as f32 / i16::MAX as f32;
                         }
-                    },
-                    move |err| {
-                        tracing::error!("audio input stream error: {err}");
-                    },
-                    None,
-                )
-                .map_err(|e| CivlinkError::Audio(format!("failed to build input stream: {e}")))?,
-            SampleFormat::I16 => device
-                .build_input_stream(
-                    &config,
-                    move |data: &[i16], _: &cpal::InputCallbackInfo| {
-                        for &sample in data {
-                            let f = sample as f32 / i16::MAX as f32;
-                            let _ = producer.try_push(f);
-                        }
-                    },
-                    move |err| {
-                        tracing::error!("audio input stream error: {err}");
-                    },
-                    None,
-                )
-                .map_err(|e| CivlinkError::Audio(format!("failed to build input stream: {e}")))?,
-            _ => {
-                return Err(CivlinkError::Audio(format!(
-                    "unsupported sample format: {sample_format:?}"
-                )));
-            }
-        };
+                        data.len().min(slice.len())
+                    });
+                    if result.is_err() {
+                        tracing::warn!("audio ring buffer disconnected");
+                    }
+                },
+                move |err| {
+                    tracing::error!("audio input stream error: {err}");
+                },
+                None,
+            )
+            .map_err(|e| CivlinkError::Audio(format!("failed to build input stream: {e}")))?;
 
         stream
             .play()
@@ -129,10 +118,11 @@ impl AudioCapture {
         tracing::info!("audio capture stream started");
 
         // Spawn the encoding thread (not async — opus encoding is CPU-bound)
+        let mut encoder = AudioEncoder::new(consumer, tx_clone, sample_rate, opus_channels, frame_samples)?;
         std::thread::Builder::new()
             .name("audio-encoder".into())
             .spawn(move || {
-                if let Err(e) = encode_loop(&mut consumer, &tx_clone, sample_rate, opus_channels, frame_size, ch) {
+                if let Err(e) = encoder.run() {
                     tracing::error!("audio encoder exited with error: {e}");
                 }
             })
@@ -163,43 +153,4 @@ fn find_device(host: &cpal::Host, name: &str) -> Result<cpal::Device> {
     }
 
     Err(CivlinkError::Audio(format!("audio device '{name}' not found")))
-}
-
-fn encode_loop(
-    consumer: &mut impl Consumer<Item = f32>,
-    tx: &broadcast::Sender<AudioFrame>,
-    sample_rate: u32,
-    opus_channels: Channels,
-    frame_size: usize,
-    channels: usize,
-) -> Result<()> {
-    let mut encoder = Encoder::new(sample_rate, opus_channels, Application::Audio)
-        .map_err(|e| CivlinkError::Audio(format!("failed to create opus encoder: {e}")))?;
-
-    let mut input_buf = vec![0f32; frame_size * channels];
-    let mut output_buf = vec![0u8; 4000]; // max opus packet
-
-    tracing::debug!("opus encoder started");
-
-    loop {
-        if consumer.occupied_len() >= input_buf.len() {
-            let n = consumer.pop_slice(&mut input_buf);
-            debug_assert_eq!(n, input_buf.len());
-
-            let encoded_len = encoder
-                .encode_float(&input_buf, &mut output_buf)
-                .map_err(|e| CivlinkError::Audio(format!("opus encode error: {e}")))?;
-
-            let frame = AudioFrame {
-                data: Bytes::copy_from_slice(&output_buf[..encoded_len]),
-                duration_ms: 20,
-            };
-
-            // If no subscribers, this returns Err — that's fine, just drop the frame
-            let _ = tx.send(frame);
-        } else {
-            // Sleep briefly to avoid busy-waiting
-            std::thread::sleep(std::time::Duration::from_millis(5));
-        }
-    }
 }

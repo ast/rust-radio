@@ -25,6 +25,8 @@ enum Command {
     UserRemove { username: String },
     /// List configured users
     UserList,
+    /// Test audio capture (prints frame info and detects silence)
+    TestAudio,
 }
 
 #[tokio::main]
@@ -51,6 +53,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::UserList => {
             civlink::commands::user_list::run(&cli.config)?;
+        }
+        Command::TestAudio => {
+            let config = civlink::Config::load(&cli.config)?;
+            civlink::commands::test_audio::run(config).await?;
         }
     }
 
