@@ -22,6 +22,7 @@ A Rust workspace for software-defined radio reception, real-time audio streaming
 
 *** Radio Control
 - [[file:sidebridge/README.org][sidebridge]] — Async =Radio= trait hierarchy, Icom CI-V parser/codec (=nom=), and =civ-bridge=/=civ-client= binaries
+- [[file:civlink/README.org][civlink]] — WebRTC-based web interface for remote Icom radio control (audio, spectrum, rig control via browser)
 
 ** Building
 
@@ -55,5 +56,8 @@ A =Justfile= is provided for common workflows:
 
 - Rust 2024 edition
 - =libairspyhf= (for =airspyhf-sys=)
-- =libopus-dev=, =libasound2-dev= (for cross-compilation, see =Cross.toml=)
+- =libasound2-dev= (for =cpal= audio in =sideband= and =civlink=)
+- =cmake= (for building the Opus codec, needed by =sideband= and =civlink=)
+- =libopus-dev= (for cross-compilation, see =Cross.toml=)
 - =gstreamer= (for receiving/testing RTP audio streams, see =sideband/README.org=)
+- Node.js + npm (for the =civlink= frontend, see =civlink/README.org=)
