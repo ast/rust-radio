@@ -2,8 +2,9 @@
 
 use std::path::Path;
 
+use anyhow::{bail, Result};
+
 use crate::config::Config;
-use crate::Result;
 
 pub fn run(config_path: &Path, username: &str) -> Result<()> {
     let mut config = Config::load(config_path)?;
@@ -12,9 +13,7 @@ pub fn run(config_path: &Path, username: &str) -> Result<()> {
     config.users.retain(|u| u.username != username);
 
     if config.users.len() == before {
-        return Err(crate::CivlinkError::Config(format!(
-            "user '{username}' not found"
-        )));
+        bail!("user '{username}' not found");
     }
 
     config.save(config_path)?;

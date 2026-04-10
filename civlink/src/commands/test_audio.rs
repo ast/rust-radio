@@ -1,9 +1,10 @@
 // Copyright SM6WJM 2026
 
+use anyhow::Result;
 use opus::{Channels, Decoder};
 
 use crate::audio::AudioCapture;
-use crate::{Config, Result};
+use crate::Config;
 
 const SILENCE_THRESHOLD: f32 = 0.001;
 
@@ -15,8 +16,7 @@ pub async fn run(config: Config) -> Result<()> {
     let capture = AudioCapture::start(config.radio.audio_device.as_deref(), sample_rate, channels)?;
     let mut rx = capture.subscribe();
 
-    let mut decoder = Decoder::new(sample_rate, Channels::Mono)
-        .map_err(|e| crate::CivlinkError::Audio(format!("failed to create opus decoder: {e}")))?;
+    let mut decoder = Decoder::new(sample_rate, Channels::Mono)?;
     let mut decode_buf = vec![0f32; frame_size];
 
     let mut total: u64 = 0;
@@ -24,15 +24,15 @@ pub async fn run(config: Config) -> Result<()> {
 
     println!("Listening for audio frames (Ctrl+C to stop)...\n");
 
+    let mut ctrl_c = std::pin::pin!(tokio::signal::ctrl_c());
+
     loop {
         tokio::select! {
             frame = rx.recv() => {
-                let frame = frame.map_err(|e| crate::CivlinkError::Audio(format!("broadcast recv error: {e}")))?;
+                let frame = frame?;
                 total += 1;
 
-                let samples = decoder
-                    .decode_float(&frame.data, &mut decode_buf, false)
-                    .map_err(|e| crate::CivlinkError::Audio(format!("opus decode error: {e}")))?;
+                let samples = decoder.decode_float(&frame.data, &mut decode_buf, false)?;
 
                 let peak = decode_buf[..samples]
                     .iter()
@@ -53,7 +53,7 @@ pub async fn run(config: Config) -> Result<()> {
                     label,
                 );
             }
-            _ = tokio::signal::ctrl_c() => {
+            _ = &mut ctrl_c => {
                 break;
             }
         }

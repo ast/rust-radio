@@ -3,17 +3,16 @@
 use std::io::{self, Write};
 use std::path::Path;
 
+use anyhow::{bail, Result};
+
 use crate::auth;
 use crate::config::{Config, UserRecord};
-use crate::Result;
 
 pub fn run(config_path: &Path, username: &str) -> Result<()> {
     let mut config = Config::load(config_path)?;
 
     if config.users.iter().any(|u| u.username == username) {
-        return Err(crate::CivlinkError::Config(format!(
-            "user '{username}' already exists"
-        )));
+        bail!("user '{username}' already exists");
     }
 
     let password = read_password("Password: ")?;

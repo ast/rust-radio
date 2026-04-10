@@ -2,8 +2,9 @@
 
 use std::path::Path;
 
+use anyhow::Result;
+
 use crate::config::Config;
-use crate::Result;
 
 pub fn run(config_path: &Path) -> Result<()> {
     let config = Config::load(config_path)?;
