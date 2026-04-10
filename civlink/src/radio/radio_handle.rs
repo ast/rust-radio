@@ -54,7 +54,13 @@ impl RadioHandle {
     /// Get a new stream of all radio events. Each caller gets an independent subscriber.
     pub fn event_stream(&self) -> Box<dyn Stream<Item = RadioEvent> + Send + Unpin> {
         let rx = self.event_tx.subscribe();
-        Box::new(BroadcastStream::new(rx).filter_map(|r| r.ok()))
+        Box::new(BroadcastStream::new(rx).filter_map(|r| match r {
+            Ok(event) => Some(event),
+            Err(e) => {
+                tracing::warn!("broadcast subscriber lagged: {e}");
+                None
+            }
+        }))
     }
 
     /// Get a new scope frame stream.

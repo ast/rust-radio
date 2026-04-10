@@ -48,9 +48,12 @@ export async function createPeerConnection(
     console.log(`[webrtc] data channel received: ${dc.label}`);
 
     if (dc.label === "radio") {
+      dc.onopen = () => console.log("[webrtc] radio data channel open");
+      dc.onclose = () => console.log("[webrtc] radio data channel closed");
       dc.onmessage = (msgEvent) => {
         try {
           const event = JSON.parse(msgEvent.data) as RadioEvent;
+          console.log("[webrtc] radio event:", event.type, event.data);
           switch (event.type) {
             case "frequency":
               if (freqHandler) freqHandler(event.data);
@@ -63,7 +66,7 @@ export async function createPeerConnection(
               break;
           }
         } catch (e) {
-          console.error("[webrtc] failed to parse radio event:", e);
+          console.error("[webrtc] failed to parse radio event:", e, msgEvent.data);
         }
       };
     }

@@ -16,9 +16,12 @@ use crate::error::CivlinkError;
 static CONNECTION_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Create a "radio" data channel that streams all radio events as JSON.
+///
+/// The event stream must be subscribed **before** calling this function so
+/// that events triggered between subscription and channel-open are buffered.
 pub async fn setup_radio_channel(
     pc: &Arc<RTCPeerConnection>,
-    subscribe: impl Fn() -> Box<dyn Stream<Item = RadioEvent> + Send + Unpin> + Send + 'static,
+    events: Box<dyn Stream<Item = RadioEvent> + Send + Unpin>,
 ) -> Result<()> {
     let dc = pc
         .create_data_channel("radio", None)
@@ -37,10 +40,20 @@ pub async fn setup_radio_channel(
         // Wait for the SCTP transport to be fully ready
         wait_for_ready(&dc).await;
 
-        let mut events = subscribe();
+        let mut events = events;
+        let mut count: u64 = 0;
         loop {
             match events.next().await {
                 Some(event) => {
+                    let tag = match &event {
+                        RadioEvent::Frequency(_) => "frequency",
+                        RadioEvent::Mode(_, _) => "mode",
+                        RadioEvent::Scope(_) => "scope",
+                        RadioEvent::SignalMeter(_) => "signal_meter",
+                        RadioEvent::RfPower(_) => "rf_power",
+                        RadioEvent::Swr(_) => "swr",
+                        RadioEvent::Alc(_) => "alc",
+                    };
                     let json = match serde_json::to_string(&event) {
                         Ok(j) => j,
                         Err(e) => {
@@ -48,6 +61,10 @@ pub async fn setup_radio_channel(
                             continue;
                         }
                     };
+                    count += 1;
+                    if count <= 20 || tag != "scope" {
+                        tracing::debug!(cid, count, tag, "sending radio event");
+                    }
                     if let Err(e) = dc.send_text(json).await {
                         tracing::debug!(cid, "radio channel send failed: {e}");
                         break;
