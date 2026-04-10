@@ -133,15 +133,44 @@ body {
   font-size: 0.7em;
 }
 
-.mode-badge {
-  font-size: 0.85rem;
+.freq-tunable {
+  cursor: ns-resize;
+  user-select: none;
+}
+
+.freq-tunable:hover {
+  color: #4dabf5;
+}
+
+.mode-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  max-width: 10rem;
+  justify-content: flex-end;
+}
+
+.mode-btn {
+  font-size: 0.7rem;
   font-weight: 600;
+  color: #888888;
+  background: transparent;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  border: 1px solid #444;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+}
+
+.mode-btn:hover {
+  color: #cccccc;
+  border-color: #666;
+}
+
+.mode-btn-active {
   color: #4dabf5;
   background: rgba(77, 171, 245, 0.12);
-  padding: 0.25rem 0.6rem;
-  border-radius: 3px;
-  border: 1px solid rgba(77, 171, 245, 0.3);
-  letter-spacing: 0.05em;
+  border-color: rgba(77, 171, 245, 0.3);
 }
 
 /* ---- Spectrum / waterfall ---- */
@@ -155,6 +184,10 @@ body {
   display: block;
   background: #0a0a0a;
   border-radius: 3px;
+}
+
+.spectrum-clickable {
+  cursor: crosshair;
 }
 
 /* ---- Action buttons ---- */

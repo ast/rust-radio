@@ -15,7 +15,9 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
   const [audioBlocked, setAudioBlocked] = createSignal(false);
   const [bins, setBins] = createSignal<number[]>([]);
   const [frequency, setFrequency] = createSignal(0);
-  const [mode, setMode] = createSignal("USB");
+  const [mode, setMode] = createSignal("Usb");
+  const [centerHz, setCenterHz] = createSignal(0);
+  const [spanHz, setSpanHz] = createSignal(0);
   let conn: PeerConnectionResult | undefined;
 
   const disconnect = () => {
@@ -45,6 +47,8 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
 
       result.onScopeFrame((frame) => {
         setBins(frame.bins);
+        setCenterHz(frame.center_hz);
+        setSpanHz(frame.span_hz);
       });
 
       result.onFrequency((hz) => {
@@ -97,8 +101,18 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
           <span class="status-connecting">Connecting...</span>
         )}
       </div>
-      <VfoDisplay frequency={frequency()} mode={mode()} />
-      <Spectrum bins={bins()} />
+      <VfoDisplay
+        frequency={frequency()}
+        mode={mode()}
+        onTune={(hz) => conn?.sendCommand({ type: "set_frequency", data: hz })}
+        onModeChange={(m) => conn?.sendCommand({ type: "set_mode", data: m })}
+      />
+      <Spectrum
+        bins={bins()}
+        centerHz={centerHz()}
+        spanHz={spanHz()}
+        onClickFrequency={(hz) => conn?.sendCommand({ type: "set_frequency", data: hz })}
+      />
       {audioBlocked() ? (
         <button class="audio-start-btn" onClick={resumeAudio}>Start Audio</button>
       ) : (

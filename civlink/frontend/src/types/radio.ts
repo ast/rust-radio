@@ -12,3 +12,7 @@ export type RadioEvent =
   | { type: "rf_power"; data: number }
   | { type: "swr"; data: number }
   | { type: "alc"; data: number };
+
+export type RadioCommand =
+  | { type: "set_frequency"; data: number }
+  | { type: "set_mode"; data: string };

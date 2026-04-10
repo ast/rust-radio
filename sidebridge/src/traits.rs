@@ -105,6 +105,15 @@ pub enum RadioEvent {
     Alc(u8),
 }
 
+/// Radio command — user-initiated actions sent from the frontend.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", content = "data")]
+#[serde(rename_all = "snake_case")]
+pub enum RadioCommand {
+    SetFrequency(u64),
+    SetMode(Mode),
+}
+
 // ---------------------------------------------------------------------------
 // Core trait — every radio implements this
 // ---------------------------------------------------------------------------

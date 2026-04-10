@@ -10,6 +10,8 @@ use tokio_stream::StreamExt;
 use webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 
+use sidebridge::Radio;
+
 use crate::app_state::AppState;
 use crate::webrtc_transport;
 
@@ -25,6 +27,9 @@ enum SignalingMessage {
     /// Radio event forwarded as a pre-serialized JSON value.
     #[serde(rename = "radio-event")]
     RadioEvent(serde_json::Value),
+    /// Radio command from the frontend.
+    #[serde(rename = "radio-command")]
+    RadioCommand(sidebridge::RadioCommand),
 }
 
 pub async fn ws_handler(
@@ -138,6 +143,29 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                                     tracing::error!("failed to add ICE candidate: {e}");
                                 }
                             }
+                            Ok(SignalingMessage::RadioCommand(cmd)) => {
+                                tracing::info!(sid, "radio command: {cmd:?}");
+                                if let Some(radio) = state.radio.as_ref() {
+                                    use sidebridge::RadioCommand;
+                                    match cmd {
+                                        RadioCommand::SetFrequency(hz) => {
+                                            if let Err(e) = radio.radio().set_frequency(hz).await {
+                                                tracing::error!("set_frequency failed: {e}");
+                                            } else {
+                                                // set_frequency doesn't echo back; read to trigger a RadioEvent
+                                                let _ = radio.radio().read_frequency().await;
+                                            }
+                                        }
+                                        RadioCommand::SetMode(mode) => {
+                                            if let Err(e) = radio.radio().set_mode(mode).await {
+                                                tracing::error!("set_mode failed: {e}");
+                                            } else {
+                                                let _ = radio.radio().read_mode().await;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             Ok(other) => {
                                 tracing::warn!("unexpected signaling message: {other:?}");
                             }
@@ -178,6 +206,10 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                     None => std::future::pending().await,
                 }
             } => {
+                match &event {
+                    sidebridge::RadioEvent::Scope(_) => {} // too noisy
+                    other => tracing::debug!(sid, "radio event: {other:?}"),
+                }
                 let value = match serde_json::to_value(&event) {
                     Ok(v) => v,
                     Err(e) => {

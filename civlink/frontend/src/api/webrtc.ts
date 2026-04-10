@@ -1,6 +1,6 @@
 import { SignalingClient } from "./signaling";
 import type { SignalingMessage } from "../types/messages";
-import type { ScopeFrame } from "../types/radio";
+import type { RadioCommand, ScopeFrame } from "../types/radio";
 
 export interface PeerConnectionResult {
   pc: RTCPeerConnection;
@@ -9,6 +9,7 @@ export interface PeerConnectionResult {
   onScopeFrame: (handler: (frame: ScopeFrame) => void) => void;
   onFrequency: (handler: (hz: number) => void) => void;
   onMode: (handler: (mode: string, filter: number) => void) => void;
+  sendCommand: (cmd: RadioCommand) => void;
 }
 
 export async function createPeerConnection(
@@ -134,5 +135,6 @@ export async function createPeerConnection(
     onScopeFrame: (handler) => { scopeHandler = handler; },
     onFrequency: (handler) => { freqHandler = handler; },
     onMode: (handler) => { modeHandler = handler; },
+    sendCommand: (cmd) => { signaling.send({ type: "radio-command", payload: cmd }); },
   };
 }
