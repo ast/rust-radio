@@ -22,6 +22,22 @@ pub struct LoginResponse {
     pub token: String,
 }
 
+#[derive(Deserialize)]
+pub struct ValidateRequest {
+    pub token: String,
+}
+
+pub async fn validate(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<ValidateRequest>,
+) -> impl IntoResponse {
+    if state.sessions.get_username(&req.token).await.is_some() {
+        StatusCode::OK.into_response()
+    } else {
+        StatusCode::UNAUTHORIZED.into_response()
+    }
+}
+
 pub async fn login(
     State(state): State<Arc<AppState>>,
     Json(req): Json<LoginRequest>,

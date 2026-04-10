@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 
+use sidebridge::RadioScope;
+
 use crate::app_state::AppState;
 use crate::webrtc_transport;
 
@@ -50,20 +52,30 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
         }
     };
 
-    // Set up radio data channel (spectrum + frequency) if radio is connected
+    // Set up radio data channels if radio is connected
     if let Some(ref handle) = state.radio {
         let radio = handle.radio();
-        let scope_stream = handle.scope_stream();
-        let freq_stream = handle.freq_stream();
-        if let Err(e) = webrtc_transport::data_channel::setup_radio_channel(
+        let radio2 = handle.radio();
+        let radio3 = handle.radio();
+
+        if let Err(e) = webrtc_transport::data_channel::setup_state_channel(
             &pc,
-            radio,
-            scope_stream,
-            freq_stream,
+            radio.clone(),
+            move || radio.freq_stream(),
+            move || radio2.mode_stream(),
         )
         .await
         {
-            tracing::warn!("failed to set up radio data channel: {e}");
+            tracing::warn!("failed to set up state data channel: {e}");
+        }
+
+        if let Err(e) = webrtc_transport::data_channel::setup_spectrum_channel(
+            &pc,
+            move || radio3.scope_stream(),
+        )
+        .await
+        {
+            tracing::warn!("failed to set up spectrum data channel: {e}");
         }
     }
 

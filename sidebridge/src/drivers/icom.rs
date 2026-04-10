@@ -37,6 +37,7 @@ pub struct IcomRadio {
     request_tx: mpsc::Sender<Request>,
     pub(crate) scope_tx: broadcast::Sender<ScopeFrame>,
     freq_tx: broadcast::Sender<u64>,
+    mode_tx: broadcast::Sender<(Mode, u8)>,
 }
 
 impl IcomRadio {
@@ -52,6 +53,7 @@ impl IcomRadio {
         let (request_tx, request_rx) = mpsc::channel(16);
         let (scope_tx, _) = broadcast::channel(64);
         let (freq_tx, _) = broadcast::channel(16);
+        let (mode_tx, _) = broadcast::channel(16);
         let id = url.to_string();
 
         tokio::spawn(Self::io_task(
@@ -59,6 +61,7 @@ impl IcomRadio {
             request_rx,
             scope_tx.clone(),
             freq_tx.clone(),
+            mode_tx.clone(),
         ));
 
         Ok(Self {
@@ -66,6 +69,7 @@ impl IcomRadio {
             request_tx,
             scope_tx,
             freq_tx,
+            mode_tx,
         })
     }
 
@@ -121,6 +125,18 @@ impl IcomRadio {
         ))
     }
 
+    /// Subscribe to mode updates (both solicited and unsolicited).
+    /// Returns (Mode, filter_width) tuples.
+    pub fn mode_stream(
+        &self,
+    ) -> Box<dyn tokio_stream::Stream<Item = (Mode, u8)> + Send + Unpin> {
+        let rx = self.mode_tx.subscribe();
+        Box::new(tokio_stream::StreamExt::filter_map(
+            BroadcastStream::new(rx),
+            |r: std::result::Result<(Mode, u8), _>| r.ok(),
+        ))
+    }
+
     /// Background task: reads CI-V frames and dispatches them.
     ///
     /// Scope waveform data is assembled and broadcast to subscribers.
@@ -131,6 +147,7 @@ impl IcomRadio {
         mut request_rx: mpsc::Receiver<Request>,
         scope_tx: broadcast::Sender<ScopeFrame>,
         freq_tx: broadcast::Sender<u64>,
+        mode_tx: broadcast::Sender<(Mode, u8)>,
     ) {
         let mut assembler = ScopeAssembler::new();
         let mut pending: Option<oneshot::Sender<Result<CivCommand>>> = None;
@@ -150,6 +167,12 @@ impl IcomRadio {
                                 // Broadcast frequency updates to all subscribers
                                 if let CivCommand::TransceiverFreq(freq) = &cmd {
                                     let _ = freq_tx.send(*freq);
+                                }
+                                // Broadcast mode updates to all subscribers
+                                if let CivCommand::TransceiverMode { mode, filter } = &cmd {
+                                    if let Ok(m) = mode_from_civ(*mode) {
+                                        let _ = mode_tx.send((m, *filter));
+                                    }
                                 }
                                 if let Some(tx) = pending.take() {
                                     let _ = tx.send(Ok(cmd));

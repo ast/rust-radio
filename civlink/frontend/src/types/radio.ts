@@ -1,7 +1,7 @@
 export interface RadioState {
   frequency: number;
   mode: string;
-  ptt: boolean;
+  filter: number;
 }
 
 export interface ScopeFrame {

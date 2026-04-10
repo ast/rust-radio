@@ -12,6 +12,7 @@ use crate::server::signaling;
 pub fn api_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/login", post(api::login))
+        .route("/validate", post(api::validate))
         .route("/ws", get(signaling::ws_handler))
         .with_state(state)
 }

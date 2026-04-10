@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use sidebridge::{IcomRadio, RadioScope, ScopeFrame};
+use sidebridge::{IcomRadio, Mode, RadioScope, ScopeFrame};
 use tokio_stream::Stream;
 use url::Url;
 
@@ -37,6 +37,12 @@ impl RadioHandle {
     /// unsolicited frequency changes from the radio.
     pub fn freq_stream(&self) -> Box<dyn Stream<Item = u64> + Send + Unpin> {
         self.radio.freq_stream()
+    }
+
+    /// Get a new mode update stream. Receives both solicited and
+    /// unsolicited mode changes from the radio.
+    pub fn mode_stream(&self) -> Box<dyn Stream<Item = (Mode, u8)> + Send + Unpin> {
+        self.radio.mode_stream()
     }
 
     /// Get a shared reference to the underlying radio.

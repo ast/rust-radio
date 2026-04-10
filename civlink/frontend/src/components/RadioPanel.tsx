@@ -14,6 +14,7 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
   const [audioEl, setAudioEl] = createSignal<HTMLAudioElement | undefined>();
   const [bins, setBins] = createSignal<number[]>([]);
   const [frequency, setFrequency] = createSignal(0);
+  const [mode, setMode] = createSignal("USB");
   let pc: RTCPeerConnection | undefined;
 
   onMount(async () => {
@@ -27,8 +28,9 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
         setBins(frame.bins);
       });
 
-      result.onFrequency((hz) => {
-        setFrequency(hz);
+      result.onRadioState((state) => {
+        setFrequency(state.frequency);
+        setMode(state.mode);
       });
 
       pc.onconnectionstatechange = () => {
@@ -60,7 +62,7 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
           <span class="status-connecting">Connecting...</span>
         )}
       </div>
-      <VfoDisplay frequency={frequency()} mode="USB" />
+      <VfoDisplay frequency={frequency()} mode={mode()} />
       <Spectrum bins={bins()} />
       <AudioControls audioElement={audioEl()} />
     </div>

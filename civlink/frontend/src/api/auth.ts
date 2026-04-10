@@ -1,3 +1,5 @@
+const TOKEN_KEY = "civlink_token";
+
 interface LoginResponse {
   token: string;
 }
@@ -21,5 +23,32 @@ export async function login(
 
   const data: LoginResponse = await response.json();
   console.log("[auth] login successful, token received");
+  sessionStorage.setItem(TOKEN_KEY, data.token);
   return data.token;
+}
+
+export async function restoreSession(): Promise<string | null> {
+  const token = sessionStorage.getItem(TOKEN_KEY);
+  if (!token) return null;
+
+  try {
+    const response = await fetch("/api/validate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+    if (response.ok) {
+      console.log("[auth] session restored from storage");
+      return token;
+    }
+  } catch {
+    // Server unreachable — discard stale token
+  }
+
+  sessionStorage.removeItem(TOKEN_KEY);
+  return null;
+}
+
+export function clearSession(): void {
+  sessionStorage.removeItem(TOKEN_KEY);
 }
