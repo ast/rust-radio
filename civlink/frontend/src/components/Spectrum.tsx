@@ -216,10 +216,10 @@ const Spectrum: Component<SpectrumProps> = (props) => {
   });
 
   return (
-    <div class="spectrum">
+    <>
       <canvas ref={specCanvas} width={CANVAS_WIDTH} height={SPECTRUM_HEIGHT} class="spectrum-clickable" onClick={handleCanvasClick} />
       <canvas ref={wfCanvas} width={CANVAS_WIDTH} height={WATERFALL_HEIGHT} class="spectrum-clickable" style={{ display: "block" }} onClick={handleCanvasClick} />
-    </div>
+    </>
   );
 };
 

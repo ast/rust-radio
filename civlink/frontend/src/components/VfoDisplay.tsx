@@ -32,7 +32,7 @@ const BANDS: { label: string; hz: number; mode: string }[] = [
   { label: "430",  hz: 432_174_000, mode: "Usb" },
 ];
 
-/** Format Hz as grouped digits like RS-BA1: "7.070.00" for 7.070 MHz */
+/** Format Hz as grouped digits: MHz.KHz.Hz */
 const formatFrequency = (hz: number): { mhz: string; khz: string; hz100: string } => {
   const mhzPart = Math.floor(hz / 1_000_000);
   const khzPart = Math.floor((hz % 1_000_000) / 1_000);
@@ -46,7 +46,6 @@ const formatFrequency = (hz: number): { mhz: string; khz: string; hz100: string 
 
 /** Determine which band label the current frequency falls in */
 const activeBand = (hz: number): string | null => {
-  // Ranges from IC-705 CI-V band codes (page 19)
   const ranges: [string, number, number][] = [
     ["1.8",  1_800_000,   1_999_999],
     ["3.5",  3_400_000,   4_099_999],
@@ -79,37 +78,43 @@ const VfoDisplay: Component<VfoDisplayProps> = (props) => {
   };
 
   return (
-    <div class="vfo-display">
-      <div class="vfo-top">
-        <div class="vfo-frequency">
-          <span class="freq-mhz freq-tunable" onWheel={handleWheel(1_000_000)}>{freq().mhz}</span>
-          <span class="freq-dot">.</span>
-          <span class="freq-khz freq-tunable" onWheel={handleWheel(1_000)}>{freq().khz}</span>
-          <span class="freq-dot">.</span>
-          <span class="freq-hz freq-tunable" onWheel={handleWheel(100)}>{freq().hz100}</span>
+    <>
+      <div class="vfo-section">
+        <div class="vfo-row">
+          <div class="vfo-frequency">
+            <span class="freq-mhz freq-tunable" onWheel={handleWheel(1_000_000)}>{freq().mhz}</span>
+            <span class="freq-dot">.</span>
+            <span class="freq-khz freq-tunable" onWheel={handleWheel(1_000)}>{freq().khz}</span>
+            <span class="freq-dot">.</span>
+            <span class="freq-hz freq-tunable" onWheel={handleWheel(100)}>{freq().hz100}</span>
+            <span class="freq-unit">MHz</span>
+          </div>
+          <div class="mode-panel">
+            <For each={[...MODES]}>{(m) =>
+              <button
+                class={`mode-btn ${props.mode === m ? "mode-btn-active" : ""}`}
+                onClick={() => props.onModeChange?.(m)}
+              >
+                {MODE_LABELS[m]}
+              </button>
+            }</For>
+          </div>
         </div>
-        <div class="mode-selector">
-          <For each={[...MODES]}>{(m) =>
+      </div>
+      <div class="band-section">
+        <span class="band-label">Band</span>
+        <div class="band-buttons">
+          <For each={BANDS}>{(band) =>
             <button
-              class={`mode-btn ${props.mode === m ? "mode-btn-active" : ""}`}
-              onClick={() => props.onModeChange?.(m)}
+              class={`band-btn ${currentBand() === band.label ? "band-btn-active" : ""}`}
+              onClick={() => props.onBandSelect?.(band.hz, band.mode)}
             >
-              {MODE_LABELS[m]}
+              {band.label}
             </button>
           }</For>
         </div>
       </div>
-      <div class="band-selector">
-        <For each={BANDS}>{(band) =>
-          <button
-            class={`band-btn ${currentBand() === band.label ? "band-btn-active" : ""}`}
-            onClick={() => props.onBandSelect?.(band.hz, band.mode)}
-          >
-            {band.label}
-          </button>
-        }</For>
-      </div>
-    </div>
+    </>
   );
 };
 

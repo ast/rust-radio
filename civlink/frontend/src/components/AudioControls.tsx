@@ -17,8 +17,12 @@ const AudioControls: Component<AudioControlsProps> = (props) => {
 
   return (
     <div class="audio-controls">
-      <button onClick={() => setMuted(!muted())}>
-        {muted() ? "Unmute" : "Mute"}
+      <span class="ctrl-label">AF</span>
+      <button
+        class={muted() ? "muted" : ""}
+        onClick={() => setMuted(!muted())}
+      >
+        {muted() ? "Muted" : "Mute"}
       </button>
       <input
         type="range"
@@ -27,7 +31,7 @@ const AudioControls: Component<AudioControlsProps> = (props) => {
         value={volume()}
         onInput={(e) => setVolume(Number(e.currentTarget.value))}
       />
-      <span>{volume()}%</span>
+      <span class="vol-value">{volume()}</span>
     </div>
   );
 };

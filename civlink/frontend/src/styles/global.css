@@ -1,19 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+:root {
+  --bg: #1c1c1c;
+  --panel: #222222;
+  --panel-inset: #181818;
+  --panel-border: #2e2e2e;
+  --panel-border-light: #3a3a3a;
+  --accent: #4dabf5;
+  --accent-dim: rgba(77, 171, 245, 0.15);
+  --accent-glow: rgba(77, 171, 245, 0.08);
+  --orange: #ffa726;
+  --orange-dim: rgba(255, 167, 38, 0.15);
+  --red: #ef5350;
+  --green: #4caf50;
+  --text: #cccccc;
+  --text-dim: #777777;
+  --text-bright: #ffffff;
+  --font-ui: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Share Tech Mono', 'Consolas', monospace;
+}
+
 body {
-  font-family: system-ui, -apple-system, sans-serif;
-  background: #1c1c1c;
-  color: #cccccc;
+  font-family: var(--font-ui);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
 }
 
 .app {
-  max-width: 900px;
+  max-width: 960px;
   margin: 0 auto;
-  padding: 1rem;
+  padding: 0.75rem;
 }
 
 /* ---- Login ---- */
@@ -22,270 +45,398 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  max-width: 320px;
-  margin: 4rem auto;
+  max-width: 300px;
+  margin: 6rem auto;
+  padding: 2rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
 }
 
 .login-form h1 {
   text-align: center;
-  color: #ffffff;
+  color: var(--text-bright);
+  font-family: var(--font-mono);
   font-weight: 400;
-  letter-spacing: 0.15em;
+  font-size: 1.4rem;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
+  margin-bottom: 0.5rem;
 }
 
 .login-form input {
-  padding: 0.5rem;
-  border: 1px solid #444;
-  border-radius: 3px;
-  background: #111111;
-  color: #e0e0e0;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--panel-border-light);
+  border-radius: 2px;
+  background: var(--panel-inset);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+}
+
+.login-form input:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .login-form button {
   padding: 0.5rem;
   border: none;
-  border-radius: 3px;
-  background: #3b6ea5;
-  color: #ffffff;
-  font-weight: bold;
+  border-radius: 2px;
+  background: var(--accent);
+  color: var(--bg);
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 0.85rem;
   cursor: pointer;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .login-form button:hover {
-  background: #4a80b8;
+  filter: brightness(1.1);
 }
 
 .error {
-  color: #ff4444;
+  color: var(--red);
   text-align: center;
+  font-size: 0.85rem;
 }
 
-/* ---- Radio panel ---- */
+/* ---- Radio panel (main grid layout) ---- */
 
 .radio-panel {
-  background: #222222;
-  border-radius: 6px;
-  padding: 0.75rem;
-  border: 1px solid #333;
-}
-
-/* ---- Connection status ---- */
-
-.connection-status {
-  padding: 0.25rem 0.5rem;
-  margin-bottom: 0.5rem;
-  text-align: right;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.status-connected {
-  color: #4caf50;
-}
-
-.status-connecting {
-  color: #ffa726;
-}
-
-.status-error {
-  color: #ef5350;
-}
-
-/* ---- VFO Display ---- */
-
-.vfo-display {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto auto auto auto;
+  gap: 1px;
   background: #111111;
+  border: 1px solid var(--panel-border);
   border-radius: 4px;
-  margin-bottom: 0.5rem;
-  border: 1px solid #2a2a2a;
+  overflow: hidden;
 }
 
-.vfo-top {
+/* ---- Header bar ---- */
+
+.header-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 0.4rem 0.75rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.header-title {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.connection-status {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-connected .status-dot { background: var(--green); box-shadow: 0 0 4px var(--green); }
+.status-connecting .status-dot { background: var(--orange); box-shadow: 0 0 4px var(--orange); }
+.status-error .status-dot { background: var(--red); box-shadow: 0 0 4px var(--red); }
+
+.status-connected { color: var(--green); }
+.status-connecting { color: var(--orange); }
+.status-error { color: var(--red); }
+
+/* ---- VFO section ---- */
+
+.vfo-section {
+  background: var(--panel);
+  padding: 0.75rem;
+}
+
+.vfo-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
 .vfo-frequency {
-  font-family: "Consolas", "Courier New", monospace;
-  font-size: 2.8rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: #ffffff;
+  font-family: var(--font-mono);
+  font-size: 3rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--text-bright);
   line-height: 1;
+  background: var(--panel-inset);
+  padding: 0.5rem 0.75rem;
+  border-radius: 3px;
+  border: 1px solid #252525;
+  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.4);
+  flex-shrink: 0;
 }
 
 .freq-mhz {
-  color: #ffffff;
+  color: var(--accent);
 }
 
 .freq-dot {
-  color: #666666;
-  margin: 0 0.05em;
+  color: #444444;
+  margin: 0 0.02em;
 }
 
 .freq-khz {
-  color: #ffffff;
+  color: var(--text-bright);
 }
 
 .freq-hz {
-  color: #888888;
-  font-size: 0.7em;
+  color: var(--text-dim);
+  font-size: 0.65em;
 }
 
 .freq-tunable {
   cursor: ns-resize;
   user-select: none;
+  transition: color 0.1s;
 }
 
 .freq-tunable:hover {
-  color: #4dabf5;
+  color: var(--accent);
+  text-shadow: 0 0 8px var(--accent-dim);
 }
 
-.mode-selector {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-  max-width: 10rem;
-  justify-content: flex-end;
+.freq-unit {
+  font-size: 0.65em;
+  color: var(--text-dim);
+  margin-left: 0.3em;
+  letter-spacing: 0;
+}
+
+/* ---- Mode selector (vertical strip right of VFO) ---- */
+
+.mode-panel {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
 }
 
 .mode-btn {
+  font-family: var(--font-ui);
   font-size: 0.7rem;
   font-weight: 600;
-  color: #888888;
-  background: transparent;
-  padding: 0.15rem 0.4rem;
-  border-radius: 3px;
-  border: 1px solid #444;
+  color: var(--text-dim);
+  background: var(--panel-inset);
+  padding: 0.25rem 0;
+  border-radius: 2px;
+  border: 1px solid var(--panel-border);
   cursor: pointer;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
+  text-align: center;
+  transition: all 0.1s;
+  white-space: nowrap;
 }
 
 .mode-btn:hover {
-  color: #cccccc;
-  border-color: #666;
+  color: var(--text);
+  border-color: var(--panel-border-light);
+  background: #1e1e1e;
 }
 
 .mode-btn-active {
-  color: #4dabf5;
-  background: rgba(77, 171, 245, 0.12);
-  border-color: rgba(77, 171, 245, 0.3);
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-color: rgba(77, 171, 245, 0.25);
 }
 
 /* ---- Band selector ---- */
 
-.band-selector {
+.band-section {
+  background: var(--panel);
+  padding: 0.4rem 0.75rem;
   display: flex;
-  gap: 0.25rem;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.band-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+}
+
+.band-buttons {
+  display: flex;
+  gap: 2px;
   flex-wrap: wrap;
+  flex: 1;
 }
 
 .band-btn {
-  font-size: 0.75rem;
-  font-weight: 600;
-  font-family: "Consolas", "Courier New", monospace;
-  color: #888888;
-  background: transparent;
-  padding: 0.2rem 0.5rem;
-  border-radius: 3px;
-  border: 1px solid #333;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  background: var(--panel-inset);
+  padding: 0.2rem 0.45rem;
+  border-radius: 2px;
+  border: 1px solid var(--panel-border);
   cursor: pointer;
+  transition: all 0.1s;
 }
 
 .band-btn:hover {
-  color: #cccccc;
-  border-color: #666;
+  color: var(--text);
+  border-color: var(--panel-border-light);
 }
 
 .band-btn-active {
-  color: #ffa726;
-  background: rgba(255, 167, 38, 0.12);
-  border-color: rgba(255, 167, 38, 0.3);
+  color: var(--orange);
+  background: var(--orange-dim);
+  border-color: rgba(255, 167, 38, 0.25);
 }
 
 /* ---- Spectrum / waterfall ---- */
 
-.spectrum {
-  margin-bottom: 0.5rem;
+.spectrum-section {
+  background: #000000;
 }
 
-.spectrum canvas {
+.spectrum-section canvas {
   width: 100%;
   display: block;
-  background: #0a0a0a;
-  border-radius: 3px;
 }
 
 .spectrum-clickable {
   cursor: crosshair;
 }
 
-/* ---- Action buttons ---- */
+/* ---- Controls bar (audio + future TX controls) ---- */
 
-.audio-start-btn,
-.waterfall-restart-btn {
-  display: block;
-  width: 100%;
-  padding: 0.5rem;
-  margin-top: 0.5rem;
-  border: 1px solid #444;
-  border-radius: 3px;
-  background: #2a2a2a;
-  color: #cccccc;
-  font-size: 0.85rem;
-  cursor: pointer;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.controls-bar {
+  background: var(--panel);
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
-
-.audio-start-btn:hover,
-.waterfall-restart-btn:hover {
-  background: #3b6ea5;
-  border-color: #3b6ea5;
-  color: #ffffff;
-}
-
-/* ---- Audio controls ---- */
 
 .audio-controls {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 0;
-  margin-top: 0.5rem;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.ctrl-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
 }
 
 .audio-controls button {
-  padding: 0.3rem 0.6rem;
-  border: 1px solid #444;
-  border-radius: 3px;
-  background: #2a2a2a;
-  color: #cccccc;
-  font-size: 0.8rem;
+  font-family: var(--font-ui);
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 2px;
+  background: var(--panel-inset);
+  color: var(--text-dim);
   cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: all 0.1s;
 }
 
 .audio-controls button:hover {
-  background: #3b6ea5;
-  border-color: #3b6ea5;
-  color: #ffffff;
+  color: var(--text);
+  border-color: var(--panel-border-light);
+}
+
+.audio-controls button.muted {
+  color: var(--red);
+  border-color: rgba(239, 83, 80, 0.25);
 }
 
 .audio-controls input[type="range"] {
   flex: 1;
-  accent-color: #3b6ea5;
+  max-width: 160px;
+  height: 4px;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
-.audio-controls span {
-  font-size: 0.8rem;
-  color: #888888;
-  min-width: 3em;
+.audio-controls .vol-value {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  min-width: 2.5em;
   text-align: right;
+}
+
+/* ---- Audio start overlay button ---- */
+
+.audio-start-btn {
+  display: block;
+  width: 100%;
+  padding: 0.6rem;
+  border: none;
+  background: var(--panel);
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: all 0.1s;
+}
+
+.audio-start-btn:hover {
+  background: var(--accent-dim);
+}
+
+/* ---- Responsive ---- */
+
+@media (max-width: 600px) {
+  .app {
+    padding: 0;
+  }
+
+  .radio-panel {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  .vfo-frequency {
+    font-size: 2.2rem;
+  }
+
+  .vfo-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .mode-panel {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }

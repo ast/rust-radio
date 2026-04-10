@@ -94,14 +94,17 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
 
   return (
     <div class="radio-panel">
-      <div class="connection-status">
-        {error() ? (
-          <span class="status-error">{error()}</span>
-        ) : connected() ? (
-          <span class="status-connected">Connected</span>
-        ) : (
-          <span class="status-connecting">Connecting...</span>
-        )}
+      <div class="header-bar">
+        <span class="header-title">civlink</span>
+        <div class="connection-status">
+          {error() ? (
+            <span class="status-error"><span class="status-dot" />{error()}</span>
+          ) : connected() ? (
+            <span class="status-connected"><span class="status-dot" />Connected</span>
+          ) : (
+            <span class="status-connecting"><span class="status-dot" />Connecting</span>
+          )}
+        </div>
       </div>
       <VfoDisplay
         frequency={frequency()}
@@ -113,20 +116,24 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
           conn?.sendCommand({ type: "set_mode", data: m });
         }}
       />
-      <Spectrum
-        bins={bins()}
-        centerHz={centerHz()}
-        spanHz={spanHz()}
-        frequency={frequency()}
-        mode={mode()}
-        filter={filter()}
-        onClickFrequency={(hz) => conn?.sendCommand({ type: "set_frequency", data: hz })}
-      />
-      {audioBlocked() ? (
-        <button class="audio-start-btn" onClick={resumeAudio}>Start Audio</button>
-      ) : (
-        <AudioControls audioElement={audioEl()} />
-      )}
+      <div class="spectrum-section">
+        <Spectrum
+          bins={bins()}
+          centerHz={centerHz()}
+          spanHz={spanHz()}
+          frequency={frequency()}
+          mode={mode()}
+          filter={filter()}
+          onClickFrequency={(hz) => conn?.sendCommand({ type: "set_frequency", data: hz })}
+        />
+      </div>
+      <div class="controls-bar">
+        {audioBlocked() ? (
+          <button class="audio-start-btn" onClick={resumeAudio}>Start Audio</button>
+        ) : (
+          <AudioControls audioElement={audioEl()} />
+        )}
+      </div>
     </div>
   );
 };
