@@ -10,8 +10,8 @@ axum-extra = { version = "0.10", features = ["typed-header"] }
 tower-http = { version = "0.6", features = ["fs", "cors"] }
 
 # WebRTC
-webrtc = "0.12"
-webrtc-media = "0.9"
+webrtc = "0.17.1"
+webrtc-media = "0.17.1"
 bytes = "1"
 
 # Audio
