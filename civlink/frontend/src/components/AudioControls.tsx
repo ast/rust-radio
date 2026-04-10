@@ -30,6 +30,11 @@ const AudioControls: Component<AudioControlsProps> = (props) => {
         max="100"
         value={volume()}
         onInput={(e) => setVolume(Number(e.currentTarget.value))}
+        onWheel={(e) => {
+          e.preventDefault();
+          const step = e.deltaY < 0 ? 5 : -5;
+          setVolume(Math.max(0, Math.min(100, volume() + step)));
+        }}
       />
       <span class="vol-value">{volume()}</span>
     </div>
