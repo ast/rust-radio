@@ -9,11 +9,14 @@ Provides a browser-based frontend for full radio operation — audio, spectrum, 
 
 * Features
 
-- Bidirectional audio via WebRTC media tracks
-- Live spectrum display (bins read directly from the radio)
-- Rig control: frequency, mode, PTT
-- Multiple listeners, single controller
-- Supports Icom CI-V radios via the =sidebridge= crate
+- Bidirectional audio via WebRTC media tracks (Opus @ 48 kHz)
+- Live spectrum display (bins read directly from the radio via CI-V scope data)
+- Rig control: frequency, mode, PTT via WebRTC data channels
+- Multiple listeners, single controller model — anyone can listen, one operator at a time
+- Supports Icom CI-V radios (IC-705, IC-7300, etc.) via the =sidebridge= crate
+- User authentication with argon2 password hashing
+- TOML-based configuration
+- Cross-compiles to aarch64 for Raspberry Pi deployment
 
 * Architecture
 
@@ -89,15 +92,31 @@ civlink/
 │       ├── peer.rs              ← peer connection lifecycle
 │       ├── media_track.rs       ← audio track management
 │       └── data_channel.rs      ← rig control messages
-├── tests/                       ← integration tests
+├── tests/
+│   ├── api.rs                   ← REST endpoint tests
+│   ├── auth.rs                  ← auth flow tests
+│   ├── config.rs                ← config parsing tests
+│   ├── controller.rs            ← controller lock tests
+│   └── session.rs               ← session store tests
 ├── frontend/
 │   ├── src/
 │   │   ├── index.tsx            ← SolidJS entry point
 │   │   ├── App.tsx              ← top-level component
-│   │   ├── components/          ← UI components
-│   │   ├── api/                 ← auth, signaling, webrtc
-│   │   ├── types/               ← TypeScript type definitions
-│   │   └── styles/              ← CSS
+│   │   ├── components/
+│   │   │   ├── AudioControls.tsx
+│   │   │   ├── Login.tsx
+│   │   │   ├── RadioPanel.tsx
+│   │   │   ├── Spectrum.tsx
+│   │   │   └── VfoDisplay.tsx
+│   │   ├── api/
+│   │   │   ├── auth.ts          ← login / token handling
+│   │   │   ├── signaling.ts     ← WebSocket signaling
+│   │   │   └── webrtc.ts        ← RTCPeerConnection setup
+│   │   ├── types/
+│   │   │   ├── messages.ts      ← signaling message types
+│   │   │   └── radio.ts         ← radio state types
+│   │   └── styles/
+│   │       └── global.css
 │   ├── package.json
 │   ├── tsconfig.json
 │   └── vite.config.ts
@@ -231,6 +250,106 @@ scp target/aarch64-unknown-linux-gnu/release/civlink shack:~/
 #+END_SRC
 
 See the workspace root =Justfile= for additional deploy recipes.
+
+* WebRTC: How It Works
+
+This section explains the WebRTC protocol concepts used in civlink. Understanding these helps when debugging connection issues or extending the application.
+
+** Overview
+
+[[https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API][WebRTC]] (Web Real-Time Communication) is a set of browser APIs and protocols for peer-to-peer audio, video, and data transfer with low latency. civlink uses it to stream radio audio bidirectionally and to send rig control commands between the browser and the backend.
+
+** Key Concepts
+
+*** Signaling
+
+Before two WebRTC peers can communicate, they need to exchange connection metadata (SDP offers/answers and ICE candidates). WebRTC does *not* define how this exchange happens — that's called [[https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Signaling_and_video_calling#the_signaling_server][signaling]], and it's up to the application.
+
+civlink uses a WebSocket connection (=/ws/signaling=) as its signaling channel. The flow is:
+
+1. Browser creates an =RTCPeerConnection= and generates an SDP offer
+2. Offer is sent to the backend over WebSocket
+3. Backend creates its own peer connection (via =webrtc-rs=), generates an SDP answer
+4. Answer is sent back over WebSocket
+5. ICE candidates are exchanged over the same WebSocket
+
+See: [[https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Connectivity#signaling][MDN — WebRTC Signaling]]
+
+*** SDP (Session Description Protocol)
+
+[[https://developer.mozilla.org/en-US/docs/Glossary/SDP][SDP]] describes the media capabilities of each peer — codecs supported, transport addresses, media types, etc. In civlink, the SDP negotiation establishes an Opus audio stream.
+
+- *Offer*: "Here's what I can send/receive"
+- *Answer*: "Here's what I agree to send/receive"
+
+See: [[https://developer.mozilla.org/en-US/docs/Web/API/RTCSessionDescription][MDN — RTCSessionDescription]]
+
+*** ICE (Interactive Connectivity Establishment)
+
+[[https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Protocols#ice][ICE]] is the mechanism WebRTC uses to find the best network path between peers. Each peer gathers *candidates* (possible IP:port combinations) and shares them with the other side. Types of candidates:
+
+- *host*: direct local network address
+- *srflx* (server reflexive): public address discovered via a STUN server
+- *relay*: traffic relayed through a TURN server (fallback when direct connection fails)
+
+For civlink's typical use case (browser on the local network or VPN connecting to a Pi), host candidates usually suffice. STUN/TURN are needed if operating across NATs.
+
+See: [[https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Protocols#ice][MDN — ICE]], [[https://developer.mozilla.org/en-US/docs/Web/API/RTCIceCandidate][MDN — RTCIceCandidate]]
+
+*** Media Tracks
+
+Once the connection is established, audio flows over [[https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamTrack][MediaStreamTracks]]. civlink uses:
+
+- A *receive track* for radio RX audio (backend → browser)
+- A *send track* for TX audio / microphone (browser → backend)
+
+Audio is encoded with [[https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Audio_codecs#opus][Opus]] at 48 kHz, which WebRTC supports natively.
+
+See: [[https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/addTrack][MDN — RTCPeerConnection.addTrack()]]
+
+*** Data Channels
+
+[[https://developer.mozilla.org/en-US/docs/Web/API/RTCDataChannel][RTCDataChannel]] provides a bidirectional channel for arbitrary data over the same peer connection. civlink uses data channels for rig control messages (frequency changes, mode selection, PTT) as JSON.
+
+Data channels can be configured as ordered/unordered and reliable/unreliable. For rig control, civlink uses ordered + reliable (the default) since commands must arrive and in sequence.
+
+See: [[https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Using_data_channels][MDN — Using WebRTC Data Channels]]
+
+** Connection Lifecycle in civlink
+
+#+BEGIN_SRC
+  Browser                          Backend
+     │                                │
+     │──── WebSocket connect ────────►│
+     │──── Login (credentials) ──────►│
+     │◄─── Auth token ───────────────│
+     │                                │
+     │──── SDP Offer ────────────────►│  ← createOffer()
+     │◄─── SDP Answer ──────────────│  ← createAnswer()
+     │                                │
+     │◄──► ICE Candidates ──────────►│  ← trickle ICE
+     │                                │
+     │◄═══ Audio Track (RX) ════════│  ← radio audio
+     │═══► Audio Track (TX) ════════►│  ← microphone
+     │                                │
+     │◄──► Data Channel ───────────►│  ← rig control JSON
+     │                                │
+#+END_SRC
+
+** Debugging Tips
+
+- Check the browser console for ICE connection state changes (=iceConnectionState=)
+- If the connection stalls at "checking", ICE candidates aren't getting through — check firewall/NAT
+- Use =chrome://webrtc-internals= (Chrome) or =about:webrtc= (Firefox) to inspect peer connections, codecs, and packet stats
+- The backend logs ICE state transitions via =tracing= — run with =RUST_LOG=civlink=debug=
+
+** Further Reading
+
+- [[https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API][MDN — WebRTC API]] — comprehensive reference
+- [[https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Protocols][MDN — WebRTC Protocols]] — ICE, STUN, TURN, SDP explained
+- [[https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Signaling_and_video_calling][MDN — Signaling and Video Calling]] — full walkthrough of a WebRTC application
+- [[https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Using_data_channels][MDN — Using Data Channels]] — data channel patterns
+- [[https://webrtcforthecurious.com/][WebRTC for the Curious]] — free book covering the protocol in depth
 
 * License
 
