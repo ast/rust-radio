@@ -1,0 +1,4 @@
+* TODOs
+- [ ] Should command that returns ok/ng wait for that...
+- [ ] Add filter and bandwidth indicator
+- [ ] Handle different waterfall modes

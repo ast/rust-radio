@@ -106,6 +106,10 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
         mode={mode()}
         onTune={(hz) => conn?.sendCommand({ type: "set_frequency", data: hz })}
         onModeChange={(m) => conn?.sendCommand({ type: "set_mode", data: m })}
+        onBandSelect={(hz, m) => {
+          conn?.sendCommand({ type: "set_frequency", data: hz });
+          conn?.sendCommand({ type: "set_mode", data: m });
+        }}
       />
       <Spectrum
         bins={bins()}

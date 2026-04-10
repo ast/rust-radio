@@ -97,13 +97,19 @@ body {
 
 .vfo-display {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 0.5rem;
   padding: 0.75rem 1rem;
   background: #111111;
   border-radius: 4px;
   margin-bottom: 0.5rem;
   border: 1px solid #2a2a2a;
+}
+
+.vfo-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .vfo-frequency {
@@ -171,6 +177,37 @@ body {
   color: #4dabf5;
   background: rgba(77, 171, 245, 0.12);
   border-color: rgba(77, 171, 245, 0.3);
+}
+
+/* ---- Band selector ---- */
+
+.band-selector {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.band-btn {
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: "Consolas", "Courier New", monospace;
+  color: #888888;
+  background: transparent;
+  padding: 0.2rem 0.5rem;
+  border-radius: 3px;
+  border: 1px solid #333;
+  cursor: pointer;
+}
+
+.band-btn:hover {
+  color: #cccccc;
+  border-color: #666;
+}
+
+.band-btn-active {
+  color: #ffa726;
+  background: rgba(255, 167, 38, 0.12);
+  border-color: rgba(255, 167, 38, 0.3);
 }
 
 /* ---- Spectrum / waterfall ---- */
