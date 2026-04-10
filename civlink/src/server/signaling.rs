@@ -9,8 +9,6 @@ use serde::{Deserialize, Serialize};
 use webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 
-use sidebridge::RadioScope;
-
 use crate::app_state::AppState;
 use crate::webrtc_transport;
 
@@ -59,14 +57,16 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
     // Set up radio data channels if radio is connected
     if let Some(ref handle) = state.radio {
         let radio = handle.radio();
-        let radio2 = handle.radio();
-        let radio3 = handle.radio();
+
+        let s1 = Arc::clone(&state);
+        let s2 = Arc::clone(&state);
+        let s3 = Arc::clone(&state);
 
         if let Err(e) = webrtc_transport::data_channel::setup_state_channel(
             &pc,
-            radio.clone(),
-            move || radio.freq_stream(),
-            move || radio2.mode_stream(),
+            radio,
+            move || s1.radio.as_ref().unwrap().freq_stream(),
+            move || s2.radio.as_ref().unwrap().mode_stream(),
         )
         .await
         {
@@ -75,7 +75,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
 
         if let Err(e) = webrtc_transport::data_channel::setup_spectrum_channel(
             &pc,
-            move || radio3.scope_stream(),
+            move || s3.radio.as_ref().unwrap().scope_stream(),
         )
         .await
         {
