@@ -16,6 +16,7 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
   const [bins, setBins] = createSignal<number[]>([]);
   const [frequency, setFrequency] = createSignal(0);
   const [mode, setMode] = createSignal("Usb");
+  const [filter, setFilter] = createSignal(1);
   const [centerHz, setCenterHz] = createSignal(0);
   const [spanHz, setSpanHz] = createSignal(0);
   let conn: PeerConnectionResult | undefined;
@@ -55,8 +56,9 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
         setFrequency(hz);
       });
 
-      result.onMode((m) => {
+      result.onMode((m, f) => {
         setMode(m);
+        setFilter(f);
       });
 
       result.pc.onconnectionstatechange = () => {
@@ -115,6 +117,9 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
         bins={bins()}
         centerHz={centerHz()}
         spanHz={spanHz()}
+        frequency={frequency()}
+        mode={mode()}
+        filter={filter()}
         onClickFrequency={(hz) => conn?.sendCommand({ type: "set_frequency", data: hz })}
       />
       {audioBlocked() ? (

@@ -1,4 +1,24 @@
 * TODOs
 - [ ] Should command that returns ok/ng wait for that...
 - [ ] Add filter and bandwidth indicator
+- [ ] Filter adjustment
 - [ ] Handle different waterfall modes
+- [ ] Embed frontend in binary
+
+
+c error has occurred: `alsa::poll()` returned POLLERR
+2026-04-10T21:26:22.163604Z ERROR civlink::audio::audio_capture: audio input stream error: A backend-specific error has occurred: `alsa::poll()` returned POLLERR
+2026-04-10T21:26:22.163613Z ERROR civlink::audio::audio_capture: audio input stream error: A backend-specific error has occurred: `alsa::poll()` returned POLLERR
+2026-04-10T21:26:22.163623Z ERROR civlink::audio::audio_capture: audio input stream error: A backend-specific error has occurred: `alsa::poll()` returned POLLERR
+2026-04-10T21:26:22.163632Z ERROR civlink::audio::audio_capture: audio input stream error: A backend-specific error has occurred: `alsa::poll()` returned POLLERR
+2026-04-10T21:26:22.163641Z ERROR civlink::audio::audio_capture: audio input stream error: A backend-specific error has occurred: `alsa::poll()` returned POLLERR
+2026-04-10T21:26:22.163650Z ERROR civlink::audio::audio_capture: audio input stream error: A backend-specific error has occurred: `alsa::poll()` returned POLLERR
+2026-04-10T21:26:22.163659Z ERROR civlink::audio::audio_capture: audio input stream error: A backend-specific error has occurred: `alsa::poll()` returned POLLERR
+2026-04-10T21:26:22.163669Z ERROR civlink::audio::audio_capture: audio input stream error: A backend-specific error has occurred: `alsa::poll()` returned POLLERR
+2026-04-10T21:26:22.163678Z ERROR civlink::audio::audio_capture: audio input stream error: A backend-specific error has occurred: `alsa::poll()` returned POLLERR
+2026-04-10T21:26:22.163687Z ERROR civlink::audio::audio_capture: audio input stream error: A backend-specific error has occurred: `alsa::poll()` returned POLLERR
+2026-04-10T21:26:22.163696Z ERROR civlink::audio::audio_capture: audio input stream error: A backend-specific error has occurred: `alsa::poll()` returned POLLERR
+2026-04-10T21:26:22.163705Z ERROR civlink::audio::audio_capture: audio input stream error: A backend-specific error has occurred: `alsa::poll()` returned POLLERR
+2026-04-10T21:26:22.163715Z ERROR civlink::audio::audio_capture: audio input stream error: A backend-specific error has occurred: `alsa::poll()` returned POLLERR
+2026-04-10T21:26:22.163724Z ERROR civlink::audio::audio_capture: audio input stream error: A backend-specific error has occurred: `alsa::poll()` returned POLLERR
+^Cerror: Recipe `deploy` was terminated on line 41 by signal 2

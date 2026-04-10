@@ -4,6 +4,9 @@ interface SpectrumProps {
   bins: number[];
   centerHz?: number;
   spanHz?: number;
+  frequency?: number;
+  mode?: string;
+  filter?: number;
   onClickFrequency?: (hz: number) => void;
 }
 
@@ -50,6 +53,41 @@ function binToColor(value: number): [number, number, number] {
     return [255, Math.round(s * 255), Math.round(s * 255)];
   }
 }
+
+// IC-705 factory default IF filter widths (Hz) per mode and filter preset.
+// FIL1 is widest, FIL3 is narrowest. These are approximate factory defaults.
+const FILTER_WIDTHS: Record<string, [number, number, number]> = {
+  // [FIL1, FIL2, FIL3]
+  Lsb:     [3000, 2400, 500],
+  Usb:     [3000, 2400, 500],
+  Am:      [9000, 6000, 3000],
+  Cw:      [500,  250,  100],
+  Fm:      [15000, 10000, 7000],
+  Rtty:    [500,  250,  100],
+  CwR:     [500,  250,  100],
+  RttyR:   [500,  250,  100],
+  DataLsb: [3000, 2400, 500],
+  DataUsb: [3000, 2400, 500],
+  DataFm:  [15000, 10000, 7000],
+};
+
+/** Get filter width in Hz for current mode and filter preset (1-3) */
+function getFilterWidth(mode?: string, filter?: number): number {
+  if (!mode) return 3000;
+  const widths = FILTER_WIDTHS[mode];
+  if (!widths) return 3000;
+  const idx = Math.max(0, Math.min(2, (filter ?? 1) - 1));
+  return widths[idx];
+}
+
+/** Convert a frequency to a canvas X pixel position */
+function freqToX(freq: number, centerHz: number, spanHz: number): number {
+  return ((freq - centerHz + spanHz / 2) / spanHz) * CANVAS_WIDTH;
+}
+
+const MARKER_COLOR = "rgba(255, 50, 50, 0.9)";
+const PASSBAND_COLOR = "rgba(255, 255, 255, 0.06)";
+const PASSBAND_EDGE_COLOR = "rgba(255, 255, 255, 0.15)";
 
 const Spectrum: Component<SpectrumProps> = (props) => {
   let specCanvas: HTMLCanvasElement | undefined;
@@ -119,6 +157,38 @@ const Spectrum: Component<SpectrumProps> = (props) => {
       ctx.strokeStyle = LINE_COLOR;
       ctx.lineWidth = 1;
       ctx.stroke();
+
+      // --- Tuning indicator + filter passband ---
+      const center = props.centerHz;
+      const span = props.spanHz;
+      const freq = props.frequency;
+      if (center && span && freq) {
+        const cx = freqToX(freq, center, span);
+        const filterHz = getFilterWidth(props.mode, props.filter);
+        const halfW = (filterHz / span) * CANVAS_WIDTH / 2;
+
+        // Passband fill
+        ctx.fillStyle = PASSBAND_COLOR;
+        ctx.fillRect(cx - halfW, 0, halfW * 2, SPECTRUM_HEIGHT);
+
+        // Passband edges
+        ctx.strokeStyle = PASSBAND_EDGE_COLOR;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(cx - halfW, 0);
+        ctx.lineTo(cx - halfW, SPECTRUM_HEIGHT);
+        ctx.moveTo(cx + halfW, 0);
+        ctx.lineTo(cx + halfW, SPECTRUM_HEIGHT);
+        ctx.stroke();
+
+        // Center line
+        ctx.strokeStyle = MARKER_COLOR;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(cx, 0);
+        ctx.lineTo(cx, SPECTRUM_HEIGHT);
+        ctx.stroke();
+      }
     }
 
     // --- Waterfall ---
