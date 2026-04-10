@@ -3,7 +3,7 @@
 - [ ] Add filter and bandwidth indicator
 - [ ] Filter adjustment
 - [ ] Handle different waterfall modes
-- [ ] Embed frontend in binary
+- [ ] Embed front end in binary
 
 
 c error has occurred: `alsa::poll()` returned POLLERR

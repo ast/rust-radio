@@ -2,7 +2,7 @@
 
 use bytes::Bytes;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{SampleFormat, StreamConfig};
+use cpal::StreamConfig;
 use doublemap::ring_buffer_pair;
 use opus::Channels;
 use std::sync::mpsc;
@@ -41,14 +41,7 @@ impl AudioPlayback {
             .default_output_config()
             .map_err(|e| CivlinkError::Audio(format!("failed to get output config: {e}")))?;
 
-        let sample_format = default_config.sample_format();
         tracing::debug!("default output config: {default_config:?}");
-
-        if sample_format != SampleFormat::I16 {
-            return Err(CivlinkError::Audio(format!(
-                "unsupported sample format: {sample_format:?} (expected I16)"
-            )));
-        }
 
         let config = StreamConfig {
             channels,
@@ -85,22 +78,20 @@ impl AudioPlayback {
         let stream = device
             .build_output_stream(
                 &config,
-                move |data: &mut [i16], _: &cpal::OutputCallbackInfo| {
+                move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                     let result = consumer.consume(|slice| {
                         let n = data.len().min(slice.len());
-                        for i in 0..n {
-                            data[i] = (slice[i] * i16::MAX as f32) as i16;
-                        }
+                        data[..n].copy_from_slice(&slice[..n]);
                         // Zero-fill any remaining output to avoid stale audio
                         for sample in &mut data[n..] {
-                            *sample = 0;
+                            *sample = 0.0;
                         }
                         n
                     });
                     if result.is_err() {
                         // Decoder disconnected — output silence
                         for sample in data.iter_mut() {
-                            *sample = 0;
+                            *sample = 0.0;
                         }
                     }
                 },

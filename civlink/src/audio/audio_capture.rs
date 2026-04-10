@@ -2,7 +2,7 @@
 
 use bytes::Bytes;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{SampleFormat, StreamConfig};
+use cpal::StreamConfig;
 use doublemap::ring_buffer_pair;
 use opus::Channels;
 use tokio::sync::broadcast;
@@ -48,14 +48,7 @@ impl AudioCapture {
             .default_input_config()
             .map_err(|e| CivlinkError::Audio(format!("failed to get input config: {e}")))?;
 
-        let sample_format = default_config.sample_format();
         tracing::debug!("default input config: {default_config:?}");
-
-        if sample_format != SampleFormat::I16 {
-            return Err(CivlinkError::Audio(format!(
-                "unsupported sample format: {sample_format:?} (expected I16)"
-            )));
-        }
 
         let config = StreamConfig {
             channels,
@@ -93,12 +86,11 @@ impl AudioCapture {
         let stream = device
             .build_input_stream(
                 &config,
-                move |data: &[i16], _: &cpal::InputCallbackInfo| {
+                move |data: &[f32], _: &cpal::InputCallbackInfo| {
                     let result = producer.produce(|slice| {
-                        for (out, &s) in slice.iter_mut().zip(data) {
-                            *out = s as f32 / i16::MAX as f32;
-                        }
-                        data.len().min(slice.len())
+                        let n = data.len().min(slice.len());
+                        slice[..n].copy_from_slice(&data[..n]);
+                        n
                     });
                     if result.is_err() {
                         tracing::warn!("audio ring buffer disconnected");

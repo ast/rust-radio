@@ -4,7 +4,7 @@ frontend_dir = "frontend/dist"
 
 [radio]
 url = "serial:///dev/ic-705a"
-audio_device = "USB Audio CODEC"
+# audio_device = "USB Audio CODEC"  # uses PipeWire default source
 sample_rate = 48000
 
 [[users]]

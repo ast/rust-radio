@@ -135,6 +135,42 @@ sudo apt install libasound2-dev cmake
 guix install alsa-lib cmake
 #+END_SRC
 
+** PipeWire (Raspberry Pi)
+
+On systems where PipeWire is the audio server (e.g. Raspberry Pi OS), install the ALSA compatibility layer so that cpal can access audio devices through PipeWire:
+
+#+BEGIN_SRC bash
+sudo apt install pipewire-alsa
+#+END_SRC
+
+Without this, cpal talks directly to the ALSA kernel driver which conflicts with PipeWire owning the device, causing =alsa::poll() returned POLLERR= errors.
+
+To make the USB Audio CODEC the default PipeWire source and sink (persists across reboots):
+
+#+BEGIN_SRC bash
+mkdir -p ~/.config/wireplumber/wireplumber.conf.d/
+cat > ~/.config/wireplumber/wireplumber.conf.d/50-default-usb-codec.conf << 'EOF'
+monitor.alsa.rules = [
+  {
+    matches = [{ node.name = "alsa_input.usb-Burr-Brown_from_TI_USB_Audio_CODEC-00.analog-stereo" }]
+    actions = { update-props = { priority.session = 10000 } }
+  }
+  {
+    matches = [{ node.name = "alsa_output.usb-Burr-Brown_from_TI_USB_Audio_CODEC-00.analog-stereo" }]
+    actions = { update-props = { priority.session = 10000 } }
+  }
+]
+EOF
+#+END_SRC
+
+Then restart WirePlumber to apply:
+
+#+BEGIN_SRC bash
+systemctl --user restart wireplumber
+#+END_SRC
+
+Verify with =wpctl status= — the USB codec should show =*= next to both sink and source.
+
 ** Rust
 
 Install via [[https://rustup.rs][rustup]] (the official Rust toolchain installer):
