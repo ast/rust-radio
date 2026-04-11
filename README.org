@@ -1,4 +1,4 @@
-* rust-radio — SDR and Radio Control in Rust
+* rust-radio - SDR and Radio Control in Rust
 
 Copyright 2025-2026 Albin Stigö SM6WJM/AD8KM
 
@@ -7,22 +7,22 @@ A Rust workspace for software-defined radio reception, real-time audio streaming
 ** Workspace Crates
 
 *** Signal Processing
-- [[file:airspyhf-sys/README.org][airspyhf-sys]] — Raw FFI bindings to =libairspyhf= (generated with =bindgen=)
-- [[file:airspyhf/README.org][airspyhf]] — Safe Rust wrapper providing callback-based IQ streaming (=Complex32=)
-- [[file:signals/README.org][signals]] — Complex oscillators (standard, fast, Fs/4-optimized), file source, noise source
-- [[file:filters/README.org][filters]] — FIR filters, decimation chains, and frequency shifting for =Complex32=
-- [[file:doublemap/README.org][doublemap]] — Lock-free ring buffer via =memfd_create= + double memory mapping
-- [[file:pool/README.org][pool]] — Pre-allocated buffer pools for real-time paths
-- [[file:spectrum/README.org][spectrum]] — FFT-based spectrum analyzer (windowing + power density)
-- [[file:receiver/README.org][receiver]] — Main SDR receiver binary: streams IQ from AirspyHF, serves spectrum over a Unix socket
+- [[file:airspyhf-sys/][airspyhf-sys]] - Raw FFI bindings to =libairspyhf= (generated with =bindgen=)
+- [[file:airspyhf/][airspyhf]] - Safe Rust wrapper providing callback-based IQ streaming (=Complex32=)
+- [[file:signals/][signals]] - Complex oscillators (standard, fast, Fs/4-optimized), file source, noise source
+- [[file:filters/][filters]] - FIR filters, decimation chains, and frequency shifting for =Complex32=
+- [[file:doublemap/][doublemap]] - Lock-free ring buffer via =memfd_create= + double memory mapping
+- [[file:pool/][pool]] - Pre-allocated buffer pools for real-time paths
+- [[file:spectrum/][spectrum]] - FFT-based spectrum analyzer (windowing + power density)
+- [[file:receiver/][receiver]] - Main SDR receiver binary: streams IQ from AirspyHF, serves spectrum over a Unix socket
 
 *** Audio Streaming
-- [[file:rtp/README.org][rtp]] — RTP header construction for network audio
-- [[file:sideband/README.org][sideband]] — Captures audio via =cpal=, encodes with Opus, streams as RTP/UDP
+- [[file:rtp/][rtp]] - RTP header construction for network audio
+- [[file:sideband/][sideband]] - Captures audio via =cpal=, encodes with Opus, streams as RTP/UDP
 
 *** Radio Control
-- [[file:sidebridge/README.org][sidebridge]] — Async =Radio= trait hierarchy, Icom CI-V parser/codec (=nom=), and =civ-bridge=/=civ-client= binaries
-- [[file:civlink/README.org][civlink]] — WebRTC-based web interface for remote Icom radio control (audio, spectrum, rig control via browser)
+- [[file:sidebridge/][sidebridge]] - Async =Radio= trait hierarchy, Icom CI-V parser/codec =nom=, and =civ-bridge= / =civ-client= binaries
+- [[file:civlink/][civlink]] - WebRTC-based web interface for remote Icom radio control (audio, spectrum, rig control via browser)
 
 ** Building
 

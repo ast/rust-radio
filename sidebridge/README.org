@@ -13,21 +13,21 @@ Async radio control abstraction layer for amateur radio transceivers. Defines a 
 
 ** Core types
 
-- =Radio= — async trait: =set_frequency= / =frequency=, =set_mode= / =mode=, =set_ptt= / =ptt=
-- =Mode= — LSB, USB, AM, CW, RTTY, FM, CW-R, RTTY-R, DATA-LSB, DATA-USB, DATA-FM
-- =Capabilities= — runtime feature discovery (meter, scope, SWR, memory channels)
-- =ScopeFrame= — spectrum scope data for waterfall rendering
-- =RadioError= — typed errors: IO, Timeout, Protocol, Busy, NotSupported, CommandFailed
+- =Radio= - async trait: =set_frequency= / =frequency=, =set_mode= / =mode=, =set_ptt= / =ptt=
+- =Mode= - LSB, USB, AM, CW, RTTY, FM, CW-R, RTTY-R, DATA-LSB, DATA-USB, DATA-FM
+- =Capabilities= - runtime feature discovery (meter, scope, SWR, memory channels)
+- =ScopeFrame= - spectrum scope data for waterfall rendering
+- =RadioError= - typed errors: IO, Timeout, Protocol, Busy, NotSupported, CommandFailed
 
 ** Icom CI-V
 
 The =icom_civ= module provides a complete CI-V protocol stack:
 
-- =CivFrame= — parsed CI-V frame (dest, src, command)
-- =CivCommand= — decoded commands: frequency, mode, PTT, S-meter, waterfall, OK/NG
-- =CivCodec= — =tokio-util= =Decoder=/=Encoder= for framing CI-V over byte streams
-- =CivPacket= — stack-allocated packet for construction and serialization
-- =parser= — =nom=-based frame parser with BCD frequency encoding/decoding
+- =CivFrame= - parsed CI-V frame (dest, src, command)
+- =CivCommand= - decoded commands: frequency, mode, PTT, S-meter, waterfall, OK/NG
+- =CivCodec= - =tokio-util= =Decoder=/=Encoder= for framing CI-V over byte streams
+- =CivPacket= - stack-allocated packet for construction and serialization
+- =parser= - =nom=-based frame parser with BCD frequency encoding/decoding
 
 ** Binaries
 
@@ -108,8 +108,8 @@ The binaries can be cross-compiled for a Raspberry Pi and executed remotely:
 
 ** Design rationale
 
-- *Small core trait* — =Radio= has only frequency/mode/PTT. Every radio from a vintage IC-781 to a modern IC-705 can implement this.
-- *Capability traits* — =RadioMeter=, =RadioScope=, =RadioInfo= are separate. Drivers only implement what the hardware supports. No dummy methods.
-- *Protocol-agnostic* — Icom CI-V, Yaesu CAT, Kenwood TS-xxx all hide behind the same =Radio= trait. Protocol details live in driver modules.
-- *Symmetric get/set* — =frequency()= / =set_frequency()= instead of a monolithic =state()= snapshot. Cleaner for both polling and event-driven radios.
-- *Unix philosophy* — Local serial access by default. For remote radios, use SSH port forwarding or =socat= — no custom networking protocol needed.
+- *Small core trait* - =Radio= has only frequency/mode/PTT. Every radio from a vintage IC-781 to a modern IC-705 can implement this.
+- *Capability traits* - =RadioMeter=, =RadioScope=, =RadioInfo= are separate. Drivers only implement what the hardware supports. No dummy methods.
+- *Protocol-agnostic* - Icom CI-V, Yaesu CAT, Kenwood TS-xxx all hide behind the same =Radio= trait. Protocol details live in driver modules.
+- *Symmetric get/set* - =frequency()= / =set_frequency()= instead of a monolithic =state()= snapshot. Cleaner for both polling and event-driven radios.
+- *Unix philosophy* - Local serial access by default. For remote radios, use SSH port forwarding or =socat= -no custom networking protocol needed.

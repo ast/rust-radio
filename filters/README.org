@@ -6,9 +6,9 @@ FIR filters, decimation chains, and frequency shifting for =Complex32= IQ sample
 
 Three traits define the DSP building blocks:
 
-- =Filter<T>= — sample-in, sample-out filtering
-- =Decimator<T>= — sample-in, optional sample-out (returns =Some= every D-th sample)
-- =DelayLine<T>= — push/read interface for FIR delay lines
+- =Filter<T>= -sample-in, sample-out filtering
+- =Decimator<T>= -sample-in, optional sample-out (returns =Some= every D-th sample)
+- =DelayLine<T>= -push/read interface for FIR delay lines
 
 All are generic over =T=, so they work with both =f32= (audio) and =Complex32= (IQ).
 
@@ -20,9 +20,9 @@ Three implementations with increasing optimization:
 |------+--------------+------------+----------|
 | =NaiveFirFilter= | =Vec<f32>= | =VecDeque<T>= | Reference / testing |
 | =DynFirFilter= | =Vec<f32>= | =RingBuffer<T>= (doublemap) | Runtime-sized filters |
-| =FirFilter<T, N>= | =[f32; N]= (const generic) | =RingBuffer<T>= (doublemap) | Default — known tap count at compile time |
+| =FirFilter<T, N>= | =[f32; N]= (const generic) | =RingBuffer<T>= (doublemap) | Default -known tap count at compile time |
 
-The =RingBuffer= uses a double memory-mapped region (see =doublemap= crate) so =as_slice()= always returns a contiguous view of the delay line — no split/copy needed for the dot product.
+The =RingBuffer= uses a double memory-mapped region (see =doublemap= crate) so =as_slice()= always returns a contiguous view of the delay line -no split/copy needed for the dot product.
 
 *** Usage
 
@@ -40,7 +40,7 @@ The =RingBuffer= uses a double memory-mapped region (see =doublemap= crate) so =
 
 ** Decimation
 
-=FirDecimator<T, N, D>= combines =FirFilter= with decimation by factor =D= (must be a power of two). The dot product is only computed every D-th sample — the other samples are pushed into the delay line but skipped.
+=FirDecimator<T, N, D>= combines =FirFilter= with decimation by factor =D= (must be a power of two). The dot product is only computed every D-th sample -the other samples are pushed into the delay line but skipped.
 
 #+begin_src rust
   use filters::{Decimator, FirDecimator};
@@ -137,8 +137,8 @@ Benchmarked on 1 second of 768 kHz =Complex32= IQ data (768,000 samples):
 
 Key observations:
 
-- A ÷4 first stage beats two ÷2 stages — 75% of samples are eliminated early, reducing work for downstream filters
-- The full rotate + decimate path (768 kHz → 24 kHz) runs at *84× real-time* — plenty of headroom for additional processing
+- A ÷4 first stage beats two ÷2 stages -75% of samples are eliminated early, reducing work for downstream filters
+- The full rotate + decimate path (768 kHz → 24 kHz) runs at *84× real-time* -plenty of headroom for additional processing
 - =FirFilter= (const generic) gives the compiler the loop bound, enabling full unrolling and vectorization
 
 ** Benchmarks

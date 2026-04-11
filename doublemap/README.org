@@ -2,12 +2,12 @@
 
 Lock-free ring buffer built on a double memory-mapped region using Linux =memfd_create=. The second half of the virtual address space maps to the same physical pages as the first, so producers and consumers always see contiguous slices without copying.
 
-- =Doublemap<T>= — the underlying double-mapped buffer (Linux-only)
-- =Producer<T>= / =Consumer<T>= — thread-safe ring buffer pair with condvar-based blocking
+- =Doublemap<T>= -the underlying double-mapped buffer (Linux-only)
+- =Producer<T>= / =Consumer<T>= -thread-safe ring buffer pair with condvar-based blocking
 
 ** Why double mapping?
 
-A normal ring buffer has a wraparound problem: when the read or write position is near the end, a contiguous slice would extend past the buffer boundary. The usual fix is to split into two copies. Double mapping eliminates this — the same physical memory appears twice in virtual address space, so =slice[capacity - 10 .. capacity + 50]= is valid and contiguous.
+A normal ring buffer has a wraparound problem: when the read or write position is near the end, a contiguous slice would extend past the buffer boundary. The usual fix is to split into two copies. Double mapping eliminates this -the same physical memory appears twice in virtual address space, so =slice[capacity - 10 .. capacity + 50]= is valid and contiguous.
 
 #+begin_example
   Virtual address space:
@@ -77,7 +77,7 @@ Direct access to the double-mapped buffer. Writes to the first half are instantl
   });
 #+end_src
 
-Both =produce= and =consume= return =Result<(), Disconnected>= — when one side is dropped, the other side unblocks and gets =Err= instead of deadlocking.
+Both =produce= and =consume= return =Result<(), Disconnected>= -when one side is dropped, the other side unblocks and gets =Err= instead of deadlocking.
 
 ** Benchmarks
 
