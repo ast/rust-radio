@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.100"
+arrayvec = { version = "0.7.6", features = ["serde"] }
 async-trait = "0.1.89"
 bytes = "1.11.1"
 clap = { version = "4.5.56", features = ["derive"] }

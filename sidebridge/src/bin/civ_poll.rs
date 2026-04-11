@@ -12,7 +12,7 @@ use anyhow::Result;
 use clap::Parser;
 use url::Url;
 
-use sidebridge::{IcomRadio, Radio, RadioEvent, RadioMeter, RadioScope};
+use sidebridge::{IcomRadio, Radio, RadioEvent, RadioMeter, RadioScope, ScopeFreq};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Poll Icom radio frequency, S-meter, and scope via CI-V")]
@@ -61,11 +61,16 @@ async fn main() -> Result<()> {
         while let Ok(Some(event)) = tokio::time::timeout(scope_timeout, rx.recv()).await {
             if let RadioEvent::Scope(frame) = event {
                 frame_count += 1;
+                let freq_info = match &frame.freq {
+                    ScopeFreq::Center { center_hz, span_hz } =>
+                        format!("center={center_hz} Hz  span={span_hz} Hz"),
+                    ScopeFreq::Fixed { lower_hz, upper_hz } =>
+                        format!("lower={lower_hz} Hz  upper={upper_hz} Hz"),
+                };
                 println!(
-                    "[frame {}] center={} Hz  span={} Hz  bins={}  min={}  max={}",
+                    "[frame {}] {}  bins={}  min={}  max={}",
                     frame_count,
-                    frame.center_hz,
-                    frame.span_hz,
+                    freq_info,
                     frame.bins.len(),
                     frame.bins.iter().min().unwrap_or(&0),
                     frame.bins.iter().max().unwrap_or(&0),

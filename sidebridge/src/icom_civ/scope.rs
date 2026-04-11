@@ -3,8 +3,10 @@
 use std::fmt;
 use thiserror::Error;
 
+use arrayvec::ArrayVec;
+
 use super::parser::parse_bcd_to_u64;
-use crate::traits::ScopeFrame;
+use crate::traits::{ScopeFrame, ScopeFreq, MAX_SCOPE_BINS};
 
 /// Number of amplitude bins in a complete IC-705 scope frame.
 pub const SCOPE_BINS: usize = 475;
@@ -343,18 +345,22 @@ impl ScopeAssembler {
 
     fn build_frame(&self, header: &ScopeWaveData, bins: Vec<u8>) -> Option<ScopeFrame> {
         let freq_info = header.freq_info.as_ref()?;
-        match freq_info {
-            ScopeFreqInfo::Center { center_hz, span_hz } => Some(ScopeFrame {
+        let freq = match freq_info {
+            ScopeFreqInfo::Center { center_hz, span_hz } => ScopeFreq::Center {
                 center_hz: *center_hz,
-                span_hz: *span_hz as u32,
-                bins,
-            }),
-            ScopeFreqInfo::Fixed { lower_edge_hz, upper_edge_hz } => Some(ScopeFrame {
-                center_hz: (lower_edge_hz + upper_edge_hz) / 2,
-                span_hz: (upper_edge_hz - lower_edge_hz) as u32,
-                bins,
-            }),
-        }
+                span_hz: *span_hz,
+            },
+            ScopeFreqInfo::Fixed { lower_edge_hz, upper_edge_hz } => ScopeFreq::Fixed {
+                lower_hz: *lower_edge_hz,
+                upper_hz: *upper_edge_hz,
+            },
+        };
+        let mut arr = ArrayVec::<u8, MAX_SCOPE_BINS>::new();
+        let len = bins.len().min(MAX_SCOPE_BINS);
+        // SAFETY: we just clamped len to capacity
+        unsafe { arr.set_len(len); }
+        arr[..len].copy_from_slice(&bins[..len]);
+        Some(ScopeFrame { freq, bins: arr })
     }
 }
 
@@ -614,8 +620,7 @@ mod tests {
         let wave = parse_scope_wave(&data).unwrap();
         let frame = asm.push(wave).expect("should produce frame");
 
-        assert_eq!(frame.center_hz, freq);
-        assert_eq!(frame.span_hz, span as u32);
+        assert!(matches!(frame.freq, ScopeFreq::Center { center_hz, span_hz } if center_hz == freq && span_hz == span));
         assert_eq!(frame.bins.len(), SCOPE_BINS);
     }
 
@@ -645,8 +650,7 @@ mod tests {
         let wave = parse_scope_wave(&data).unwrap();
         let frame = asm.push(wave).expect("should produce frame on last division");
 
-        assert_eq!(frame.center_hz, freq);
-        assert_eq!(frame.span_hz, span as u32);
+        assert!(matches!(frame.freq, ScopeFreq::Center { center_hz, span_hz } if center_hz == freq && span_hz == span));
         // 10 data divisions * 48 bins each = 480
         assert_eq!(frame.bins.len(), bins_per_div * 10);
     }
@@ -679,7 +683,7 @@ mod tests {
         let frame = asm.push(parse_scope_wave(&data).unwrap()).expect("should complete second sweep");
 
         // Should have freq2, not freq1
-        assert_eq!(frame.center_hz, freq2);
+        assert!(matches!(frame.freq, ScopeFreq::Center { center_hz, .. } if center_hz == freq2));
     }
 
     #[test]
@@ -702,8 +706,7 @@ mod tests {
         let wave = parse_scope_wave(&data).unwrap();
         let frame = asm.push(wave).expect("should produce frame");
 
-        assert_eq!(frame.center_hz, (lower + upper) / 2);
-        assert_eq!(frame.span_hz, (upper - lower) as u32);
+        assert!(matches!(frame.freq, ScopeFreq::Fixed { lower_hz, upper_hz } if lower_hz == lower && upper_hz == upper));
         assert_eq!(frame.bins.len(), SCOPE_BINS);
     }
 

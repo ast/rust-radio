@@ -1,7 +1,7 @@
 // Copyright SM6WJM 2026
 
 use anyhow::{Context, Result};
-use sidebridge::RadioEvent;
+use sidebridge::{RadioEvent, ScopeFreq};
 use tokio_stream::StreamExt;
 use url::Url;
 
@@ -29,9 +29,15 @@ pub async fn run(config: Config) -> Result<()> {
                 match &event {
                     RadioEvent::Scope(frame) => {
                         let peak = frame.bins.iter().copied().max().unwrap_or(0);
+                        let freq_info = match &frame.freq {
+                            ScopeFreq::Center { center_hz, span_hz } =>
+                                format!("\"center_hz\":{center_hz},\"span_hz\":{span_hz}"),
+                            ScopeFreq::Fixed { lower_hz, upper_hz } =>
+                                format!("\"lower_hz\":{lower_hz},\"upper_hz\":{upper_hz}"),
+                        };
                         println!(
-                            "{{\"type\":\"scope\",\"center_hz\":{},\"span_hz\":{},\"bins\":{},\"peak\":{}}}",
-                            frame.center_hz, frame.span_hz, frame.bins.len(), peak,
+                            "{{\"type\":\"scope\",{},\"bins\":{},\"peak\":{}}}",
+                            freq_info, frame.bins.len(), peak,
                         );
                     }
                     _ => {

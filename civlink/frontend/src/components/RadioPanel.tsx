@@ -48,8 +48,13 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
 
       result.onScopeFrame((frame) => {
         setBins(frame.bins);
-        setCenterHz(frame.center_hz);
-        setSpanHz(frame.span_hz);
+        if (frame.freq.mode === "center") {
+          setCenterHz(frame.freq.center_hz);
+          setSpanHz(frame.freq.span_hz);
+        } else {
+          setCenterHz((frame.freq.lower_hz + frame.freq.upper_hz) / 2);
+          setSpanHz(frame.freq.upper_hz - frame.freq.lower_hz);
+        }
       });
 
       result.onFrequency((hz) => {

@@ -1,6 +1,9 @@
+export type ScopeFreq =
+  | { mode: "center"; center_hz: number; span_hz: number }
+  | { mode: "fixed"; lower_hz: number; upper_hz: number };
+
 export interface ScopeFrame {
-  center_hz: number;
-  span_hz: number;
+  freq: ScopeFreq;
   bins: number[];
 }
 
@@ -15,4 +18,5 @@ export type RadioEvent =
 
 export type RadioCommand =
   | { type: "set_frequency"; data: number }
-  | { type: "set_mode"; data: string };
+  | { type: "set_mode"; data: string }
+  | { type: "set_scope_span"; data: number };

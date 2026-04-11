@@ -1,10 +1,14 @@
 // Copyright SM6WJM 2026
 
+use arrayvec::ArrayVec;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use thiserror::Error;
 use tokio::sync::mpsc;
+
+/// Maximum number of amplitude bins in a scope frame.
+pub const MAX_SCOPE_BINS: usize = 512;
 
 // ---------------------------------------------------------------------------
 // Error
@@ -80,13 +84,24 @@ pub struct Capabilities {
     pub memory_channels: bool,
 }
 
+/// Frequency information for a scope frame.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "mode")]
+pub enum ScopeFreq {
+    /// Center mode: tuned frequency at center, symmetric span.
+    #[serde(rename = "center")]
+    Center { center_hz: u64, span_hz: u64 },
+    /// Fixed mode: absolute lower and upper edge frequencies.
+    #[serde(rename = "fixed")]
+    Fixed { lower_hz: u64, upper_hz: u64 },
+}
+
 /// Spectrum scope frame for waterfall rendering.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScopeFrame {
-    pub center_hz: u64,
-    pub span_hz: u32,
-    /// Amplitude bins (typically 0–255).
-    pub bins: Vec<u8>,
+    pub freq: ScopeFreq,
+    /// Amplitude bins (typically 0–160 on Icom radios).
+    pub bins: ArrayVec<u8, MAX_SCOPE_BINS>,
 }
 
 /// Radio event — frequency changes, mode changes, scope data, and meter
