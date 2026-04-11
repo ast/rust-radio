@@ -7,7 +7,7 @@ edition = "2024"
 # Web framework
 axum = { version = "0.8", features = ["ws"] }
 axum-extra = { version = "0.10", features = ["typed-header"] }
-tower-http = { version = "0.6", features = ["fs", "cors"] }
+tower-http = { version = "0.6", features = ["cors"] }
 
 # WebRTC
 webrtc = "0.17.1"
@@ -50,6 +50,7 @@ url = "2"
 sidebridge = { path = "../sidebridge" }
 doublemap = { path = "../doublemap" }
 pool = { path = "../pool" }
+rust-embed = { version = "8.11.0", features = ["mime-guess"] }
 #rtp = { path = "../rtp" }
 
 [dev-dependencies]

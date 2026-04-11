@@ -13,7 +13,6 @@ pub struct Config {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     pub listen_addr: String,
-    pub frontend_dir: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -5,7 +5,6 @@ use std::sync::Arc;
 use anyhow::Result;
 use axum::Router;
 use tokio::net::TcpListener;
-use tower_http::services::ServeDir;
 use url::Url;
 
 use crate::app_state::AppState;
@@ -13,10 +12,10 @@ use crate::audio::AudioCapture;
 use crate::config::Config;
 use crate::radio::RadioHandle;
 use crate::server::router::api_router;
+use crate::server::static_files::static_handler;
 
 pub async fn run(config: Config) -> Result<()> {
     tracing::info!("starting civlink server");
-    tracing::info!("frontend dir: {}", config.server.frontend_dir);
     tracing::info!("radio url: {}", config.radio.url);
     tracing::info!(
         "audio device: {}",
@@ -62,7 +61,7 @@ pub async fn run(config: Config) -> Result<()> {
 
     let app = Router::new()
         .nest("/api", api_router(Arc::clone(&state)))
-        .fallback_service(ServeDir::new(&config.server.frontend_dir));
+        .fallback(static_handler);
 
     let listener = TcpListener::bind(&config.server.listen_addr).await?;
     tracing::info!("listening on {}", config.server.listen_addr);

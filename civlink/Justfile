@@ -4,10 +4,9 @@ remote := "shack"
 config := "civlink.toml"
 workspace := justfile_directory() / ".."
 target_dir := workspace / "target"
-bundle_name := "civlink-bundle.tar.gz"
 
-# Build backend for Pi and frontend
-build: build-pi build-frontend
+# Build frontend then cross-compile backend (with embedded assets) for Pi
+build: build-frontend build-pi
 
 # Cross-compile backend for Raspberry Pi
 build-pi:
@@ -17,43 +16,29 @@ build-pi:
 build-frontend:
     cd frontend && npm install && npm run build
 
-# Create a tarball with binary, frontend, and config
-bundle: build
-    tar czf {{bundle_name}} \
-        -C {{target_dir}}/{{target_pi}}/release {{binary}} \
-        -C {{justfile_directory()}} frontend/dist {{config}}
-
-# Upload bundle and extract on Pi
-upload: bundle
-    scp {{bundle_name}} {{remote}}:~/
-    ssh {{remote}} "tar xzf ~/{{bundle_name}} && chmod +x ~/{{binary}}"
-
-# Stop civlink on the Pi
+# Stop civlink on the Pi (- ignores error if no process is running)
 stop:
     -ssh {{remote}} "pkill {{binary}}"
 
-# Run on the Pi (stops any existing instance first)
-run args="": stop
+# Full deploy: build, upload, stop, and run
+deploy args="": build stop
+    scp {{target_dir}}/{{target_pi}}/release/{{binary}} {{remote}}:~/
     ssh {{remote}} "RUST_LOG=civlink=debug ~/{{binary}} -c ~/{{config}} serve {{args}}"
 
-# Full deploy: build, bundle, upload, and run
-deploy args="": upload stop
-    ssh {{remote}} "RUST_LOG=civlink=debug ~/{{binary}} -c ~/{{config}} serve {{args}}"
-
-# Test audio capture on the Pi (cross-compile, upload binary, run)
-test-audio: build-pi
+# Test audio capture on the Pi
+test-audio: build stop
     scp {{target_dir}}/{{target_pi}}/release/{{binary}} {{remote}}:~/
     ssh {{remote}} "~/{{binary}} -c ~/{{config}} test-audio"
 
-# Test radio event stream on the Pi (cross-compile, upload binary, run)
-test-events: build-pi
+# Test radio event stream on the Pi
+test-events: build stop
     scp {{target_dir}}/{{target_pi}}/release/{{binary}} {{remote}}:~/
     ssh {{remote}} "~/{{binary}} -c ~/{{config}} test-events"
 
 # --- Local commands ---
 
 # Build and run locally
-run-local args="":
+run-local args="": build-frontend
     cargo build -p {{binary}}
     {{target_dir}}/debug/{{binary}} -c {{config}} serve {{args}}
 

@@ -1,6 +1,5 @@
 [server]
 listen_addr = "0.0.0.0:8080"
-frontend_dir = "frontend/dist"
 
 [radio]
 url = "serial:///dev/ic-705a"

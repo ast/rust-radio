@@ -9,7 +9,6 @@ fn load_and_save_round_trip() {
     let config = Config {
         server: ServerConfig {
             listen_addr: "0.0.0.0:8080".to_string(),
-            frontend_dir: "frontend/dist".to_string(),
         },
         radio: RadioConfig {
             url: "tcp://shack:9000".to_string(),
@@ -38,7 +37,6 @@ fn load_minimal_config() {
     let toml = r#"
 [server]
 listen_addr = "127.0.0.1:3000"
-frontend_dir = "dist"
 
 [radio]
 url = "serial:///dev/ttyUSB0"

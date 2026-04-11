@@ -17,7 +17,6 @@ fn test_config() -> Config {
     Config {
         server: ServerConfig {
             listen_addr: "127.0.0.1:0".to_string(),
-            frontend_dir: "frontend/dist".to_string(),
         },
         radio: RadioConfig {
             url: "tcp://localhost:9000".to_string(),

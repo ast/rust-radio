@@ -232,7 +232,6 @@ Create a =civlink.toml= configuration file:
 #+BEGIN_SRC toml
 [server]
 listen_addr = "0.0.0.0:8080"
-frontend_dir = "frontend/dist"
 
 [radio]
 url = "tcp://shack:9000"              # or "serial:///dev/ttyUSB0?baud=115200"
