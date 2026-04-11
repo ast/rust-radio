@@ -7,7 +7,7 @@ use crate::icom_civ::command::CivCommand;
 use crate::icom_civ::packet::CivPacket;
 use crate::traits::*;
 
-use super::{mode_to_civ, IcomRadio};
+use super::{IcomRadio, mode_to_civ};
 
 #[async_trait]
 impl Radio for IcomRadio {

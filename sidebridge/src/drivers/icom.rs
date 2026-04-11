@@ -129,7 +129,7 @@ impl IcomRadio {
                                     let _ = event_tx.try_send(RadioEvent::Scope(sf));
                                 }
                             }
-                            CivCommand::ScopeSetting(_) | CivCommand::ScopeRaw { .. } => {}
+                            CivCommand::ScopeRaw { .. } => {}
                             cmd => {
                                 // Route events to the event channel
                                 match &cmd {

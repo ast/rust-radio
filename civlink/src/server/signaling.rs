@@ -163,6 +163,12 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                                                 let _ = radio.radio().read_mode().await;
                                             }
                                         }
+                                        RadioCommand::SetScopeSpan(hz) => {
+                                            use sidebridge::RadioScope;
+                                            if let Err(e) = radio.radio().set_scope_span(hz).await {
+                                                tracing::error!("set_scope_span failed: {e}");
+                                            }
+                                        }
                                     }
                                 }
                             }

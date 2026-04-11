@@ -125,6 +125,7 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
           mode={mode()}
           filter={filter()}
           onClickFrequency={(hz) => conn?.sendCommand({ type: "set_frequency", data: hz })}
+          onSpanChange={(hz) => conn?.sendCommand({ type: "set_scope_span", data: hz })}
         />
       </div>
       <div class="controls-bar">

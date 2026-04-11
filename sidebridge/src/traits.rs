@@ -112,6 +112,7 @@ pub enum RadioEvent {
 pub enum RadioCommand {
     SetFrequency(u64),
     SetMode(Mode),
+    SetScopeSpan(u64),
 }
 
 // ---------------------------------------------------------------------------
@@ -183,4 +184,8 @@ pub trait RadioMeter: Radio {
 pub trait RadioScope: Radio {
     /// Enable or disable scope waveform output on the radio.
     async fn set_scope_output(&self, enable: bool) -> Result<()>;
+
+    /// Set the scope span in center mode.
+    /// Valid values: 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000 Hz.
+    async fn set_scope_span(&self, span_hz: u64) -> Result<()>;
 }

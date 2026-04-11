@@ -18,4 +18,8 @@ impl RadioScope for IcomRadio {
         }
         Ok(())
     }
+
+    async fn set_scope_span(&self, span_hz: u64) -> Result<()> {
+        self.expect_ok(CivPacket::scope_span(span_hz)).await
+    }
 }

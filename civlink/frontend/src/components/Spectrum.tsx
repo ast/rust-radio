@@ -1,4 +1,4 @@
-import { type Component, createEffect, onMount } from "solid-js";
+import { type Component, createEffect, onMount, For } from "solid-js";
 
 interface SpectrumProps {
   bins: number[];
@@ -8,7 +8,20 @@ interface SpectrumProps {
   mode?: string;
   filter?: number;
   onClickFrequency?: (hz: number) => void;
+  onSpanChange?: (spanHz: number) => void;
 }
+
+// IC-705 valid scope spans (center mode)
+const SPANS: { label: string; hz: number }[] = [
+  { label: "±2.5k",  hz:    2_500 },
+  { label: "±5k",    hz:    5_000 },
+  { label: "±10k",   hz:   10_000 },
+  { label: "±25k",   hz:   25_000 },
+  { label: "±50k",   hz:   50_000 },
+  { label: "±100k",  hz:  100_000 },
+  { label: "±250k",  hz:  250_000 },
+  { label: "±500k",  hz:  500_000 },
+];
 
 const CANVAS_WIDTH = 800;
 const SPECTRUM_HEIGHT = 100;
@@ -217,6 +230,17 @@ const Spectrum: Component<SpectrumProps> = (props) => {
 
   return (
     <>
+      <div class="span-selector">
+        <span class="ctrl-label">Span</span>
+        <For each={SPANS}>{(s) =>
+          <button
+            class={`span-btn ${props.spanHz === s.hz ? "span-btn-active" : ""}`}
+            onClick={() => props.onSpanChange?.(s.hz)}
+          >
+            {s.label}
+          </button>
+        }</For>
+      </div>
       <canvas ref={specCanvas} width={CANVAS_WIDTH} height={SPECTRUM_HEIGHT} class="spectrum-clickable" onClick={handleCanvasClick} />
       <canvas ref={wfCanvas} width={CANVAS_WIDTH} height={WATERFALL_HEIGHT} class="spectrum-clickable" style={{ display: "block" }} onClick={handleCanvasClick} />
     </>
