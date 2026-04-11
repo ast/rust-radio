@@ -1,5 +1,7 @@
 * Radio Control Features
 
+fix bins at 512 dont heap allocate
+
 ** Done
 - [X] VFO frequency display with scroll-to-tune
 - [X] Mode selector (LSB, USB, AM, CW, FM, RTTY, etc.)
