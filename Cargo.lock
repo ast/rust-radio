@@ -654,7 +654,6 @@ dependencies = [
  "opus",
  "pool",
  "rand",
- "rtp 0.1.0",
  "serde",
  "serde_json",
  "sidebridge",
