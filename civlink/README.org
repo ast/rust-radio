@@ -5,16 +5,21 @@
 
 WebRTC-based remote control interface for Icom amateur radios (IC-705, IC-7300, etc.).
 
-Provides a browser-based frontend for full radio operation — audio, spectrum, and rig control — over the network using WebRTC for low-latency media transport.
+Provides a browser-based frontend for full radio operation — audio, spectrum, and rig control — over the network using WebRTC for low-latency media transport. Compiles to a single binary with embedded frontend assets.
+
+See [[file:TODO.org][TODO.org]] for the roadmap and planned features.
 
 * Features
 
 - Bidirectional audio via WebRTC media tracks (Opus @ 48 kHz)
-- Live spectrum display (bins read directly from the radio via CI-V scope data)
-- Rig control: frequency, mode, PTT via WebRTC data channels
+- Live spectrum and waterfall display (scope data via CI-V, center and fixed edge modes)
+- Scroll-to-tune VFO display with mode and band selectors
+- Scope span selection from the browser UI
+- Rig control: frequency, mode, band via WebRTC data channels
 - Multiple listeners, single controller model — anyone can listen, one operator at a time
 - Supports Icom CI-V radios (IC-705, IC-7300, etc.) via the =sidebridge= crate
 - User authentication with argon2 password hashing
+- Single binary deployment — frontend (SolidJS) embedded via =rust-embed=
 - TOML-based configuration
 - Cross-compiles to aarch64 for Raspberry Pi deployment
 
@@ -75,19 +80,24 @@ civlink/
 │   ├── app_state.rs             ← shared server state
 │   ├── commands/
 │   │   ├── serve.rs             ← start axum server
+│   │   ├── test_audio.rs        ← audio capture test
+│   │   ├── test_events.rs       ← radio event stream test
 │   │   ├── user_add.rs          ← add user to config
 │   │   ├── user_remove.rs       ← remove user from config
 │   │   └── user_list.rs         ← list configured users
 │   ├── server/
 │   │   ├── router.rs            ← axum route definitions
 │   │   ├── api.rs               ← REST endpoints (login)
-│   │   └── signaling.rs         ← WebSocket signaling
+│   │   ├── signaling.rs         ← WebSocket signaling
+│   │   └── static_files.rs      ← rust-embed asset serving
 │   ├── radio/
 │   │   ├── radio_handle.rs      ← sidebridge radio interface
 │   │   └── controller.rs        ← exclusive control lock
 │   ├── audio/
 │   │   ├── audio_capture.rs     ← cpal → opus encoding
-│   │   └── audio_playback.rs    ← opus decoding → cpal
+│   │   ├── audio_playback.rs    ← opus decoding → cpal
+│   │   ├── audio_encoder.rs     ← opus encoder wrapper
+│   │   └── audio_decoder.rs     ← opus decoder wrapper
 │   └── webrtc_transport/
 │       ├── peer.rs              ← peer connection lifecycle
 │       ├── media_track.rs       ← audio track management
@@ -217,12 +227,20 @@ TypeScript is listed as a dev dependency in =frontend/package.json= so =npm inst
 
 * Building
 
-#+BEGIN_SRC bash
-# Backend
-cargo build -p civlink --release
+The frontend is embedded into the binary at compile time via =rust-embed=, so building the frontend first is required.
 
-# Frontend
-cd frontend && npm run build          # production build to frontend/dist/
+#+BEGIN_SRC bash
+# Frontend (produces frontend/dist/)
+cd frontend && npm install && npm run build
+
+# Backend (embeds frontend/dist/ into the binary)
+cargo build -p civlink --release
+#+END_SRC
+
+Or use the Justfile:
+
+#+BEGIN_SRC bash
+just build                            # build frontend then cross-compile for Pi
 #+END_SRC
 
 * Configuration
@@ -235,8 +253,8 @@ listen_addr = "0.0.0.0:8080"
 
 [radio]
 url = "tcp://shack:9000"              # or "serial:///dev/ttyUSB0?baud=115200"
-audio_device = "USB Audio CODEC"
-sample_rate = 48000
+audio_device = "USB Audio CODEC"      # optional, auto-detected if omitted
+sample_rate = 48000                   # default 48000
 #+END_SRC
 
 * User management
@@ -277,14 +295,19 @@ cd frontend && npm run dev
 
 * Deployment to Raspberry Pi
 
-Cross-compile and deploy to the Pi (hostname =shack=):
+The binary is self-contained (frontend assets embedded). Deploy to the Pi (hostname =shack=):
+
+#+BEGIN_SRC bash
+just deploy                           # build, upload, stop old process, and run
+#+END_SRC
+
+Or manually:
 
 #+BEGIN_SRC bash
 cross build -p civlink --target aarch64-unknown-linux-gnu --release
 scp target/aarch64-unknown-linux-gnu/release/civlink shack:~/
+ssh shack "RUST_LOG=civlink=debug ~/civlink -c ~/civlink.toml serve"
 #+END_SRC
-
-See the workspace root =Justfile= for additional deploy recipes.
 
 * WebRTC: How It Works
 

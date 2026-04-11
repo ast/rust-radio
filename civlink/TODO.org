@@ -1,7 +1,5 @@
 * Radio Control Features
 
-fix bins at 512 dont heap allocate
-
 ** Done
 - [X] VFO frequency display with scroll-to-tune
 - [X] Mode selector (LSB, USB, AM, CW, FM, RTTY, etc.)
@@ -11,6 +9,9 @@ fix bins at 512 dont heap allocate
 - [X] Center frequency and filter width indicators on spectrum
 - [X] Audio streaming (RX) with volume and mute
 - [X] WebRTC connection with auto-reconnect
+- [X] Embed frontend in binary (rust-embed, single binary deploy)
+- [X] ScopeFrame refactor: ArrayVec bins (no heap), ScopeFreq enum (center/fixed)
+- [X] Span selector UI (pending: CI-V command rejected, needs debugging)
 
 ** S-meter and Metering
 - [ ] S-meter display (sidebridge has =read_signal_strength=, =RadioEvent::SignalMeter=)
@@ -54,6 +55,6 @@ fix bins at 512 dont heap allocate
 - [ ] Zoom / span control
 
 ** Infrastructure
-- [ ] Embed frontend in binary (serve from compiled assets)
+- [ ] Configurable CI-V address (IC-705=0xA4, IC-7300=0xB6)
 - [ ] Multi-client access control (one TX, many RX)
 - [ ] Memory channels (store/recall frequency+mode presets)
