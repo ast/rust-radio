@@ -6,6 +6,10 @@ A Rust workspace for software-defined radio reception, real-time audio streaming
 
 ** Workspace Crates
 
+*** Radio Control
+- [[file:sidebridge/][sidebridge]] - Async =Radio= trait hierarchy, Icom CI-V parser/codec =nom=, and =civ-bridge= / =civ-client= binaries
+- [[file:civlink/][civlink]] - WebRTC-based web interface for remote Icom radio control (audio, spectrum, rig control via browser)
+
 *** Signal Processing
 - [[file:airspyhf-sys/][airspyhf-sys]] - Raw FFI bindings to =libairspyhf= (generated with =bindgen=)
 - [[file:airspyhf/][airspyhf]] - Safe Rust wrapper providing callback-based IQ streaming (=Complex32=)
@@ -19,10 +23,6 @@ A Rust workspace for software-defined radio reception, real-time audio streaming
 *** Audio Streaming
 - [[file:rtp/][rtp]] - RTP header construction for network audio
 - [[file:sideband/][sideband]] - Captures audio via =cpal=, encodes with Opus, streams as RTP/UDP
-
-*** Radio Control
-- [[file:sidebridge/][sidebridge]] - Async =Radio= trait hierarchy, Icom CI-V parser/codec =nom=, and =civ-bridge= / =civ-client= binaries
-- [[file:civlink/][civlink]] - WebRTC-based web interface for remote Icom radio control (audio, spectrum, rig control via browser)
 
 ** Building
 
