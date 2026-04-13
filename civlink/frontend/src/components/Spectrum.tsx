@@ -107,7 +107,7 @@ function passbandOffsets(mode: string | undefined, filterHz: number): [number, n
 
 function scopeRange(f: ScopeFreq): { leftHz: number; rightHz: number } {
   if (f.mode === "center") {
-    return { leftHz: f.center_hz - f.span_hz / 2, rightHz: f.center_hz + f.span_hz / 2 };
+    return { leftHz: f.center_hz - f.span_hz, rightHz: f.center_hz + f.span_hz };
   }
   return { leftHz: f.lower_hz, rightHz: f.upper_hz };
 }
