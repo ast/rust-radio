@@ -309,6 +309,27 @@ scp target/aarch64-unknown-linux-gnu/release/civlink shack:~/
 ssh shack "RUST_LOG=civlink=debug ~/civlink -c ~/civlink.toml serve"
 #+END_SRC
 
+* Scope modes
+
+The IC-705 exposes two spectrum scope modes over CI-V, both supported by civlink.
+
+** Center mode
+
+The scope is centered on the current VFO frequency. A single =span= setting controls the visible bandwidth. Valid spans are 2.5, 5, 10, 25, 50, 100, 250, and 500 kHz (CI-V command =27 15=).
+
+Important: the =span_hz= value carried in scope frames and accepted by =set_scope_span= is the *half-span* -the scope displays =center_hz ± span_hz=, so total visible bandwidth is =2 × span_hz=. The UI span selector labels (=±2.5k=, =±5k=, …) reflect this.
+
+** Fixed mode
+
+The scope displays a fixed =(lower_hz, higher_hz)= frequency range regardless of where the VFO is tuned. The range comes from a preset slot stored in the radio.
+
+- The IC-705 divides the HF/VHF/UHF spectrum into *17 bands* (0.03–1.60 MHz, 1.60–2.00, 2.00–6.00, … up to 400–470 MHz). The active band is selected automatically from the current VFO frequency.
+- For each band, the radio stores *3 edge preset slots* -each slot holds a user-configurable =(lower, higher)= edge pair.
+- The =fixedEdge= selector (1, 2, 3) in the UI tells the radio which of the current band's three slots to activate (CI-V command =27 16=).
+- The preset values themselves are edited via CI-V command =27 1E= or on the radio's menu. Entries below the 100 Hz digit are ignored. civlink does not currently provide a UI for editing them -programme the slots on the radio, then pick the slot here.
+
+See =sidebridge/docs/IC-705_ENG_CI-V_1_20200721.pdf= p. 27-28 for the full table of bands and command formats.
+
 * WebRTC: How It Works
 
 This section explains the WebRTC protocol concepts used in civlink. Understanding these helps when debugging connection issues or extending the application.
