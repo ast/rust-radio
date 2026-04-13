@@ -52,3 +52,24 @@ This is a Rust workspace for software-defined radio (SDR) and amateur radio cont
 - POSIX syscalls (mmap, memfd_create, ftruncate) use the `nix` crate for safe wrappers, not raw `libc`
 - The CI-V parser in `sidebridge` (under `drivers/icom/civ`) uses `nom` for frame parsing
 - Radio protocol docs (CI-V, CAT PDFs) live in `sidebridge/docs/` — use `rga` (ripgrep-all) to search them: `rga "frequency" sidebridge/docs/`
+
+## Test hardware (hostname `shack`)
+
+Agents can ssh to `shack` (a Raspberry Pi, reachable as `ssh shack`) to run tests against real radio hardware. An IC-705 is connected over USB and a USB Audio CODEC handles RX/TX audio.
+
+### Serial ports
+
+The IC-705 exposes two USB CDC-ACM virtual COM ports, symlinked on shack:
+
+- `/dev/ic-705a` → `ttyACM0` — **CI-V** (rig control). Per the IC-705 CI-V reference (`sidebridge/docs/IC-705_ENG_CI-V_1_20200721.pdf`, p. 3), this is "IC-705 Serial Port A (CI-V)". Default baud 115200. This is what `sidebridge`/`civlink` use.
+- `/dev/ic-705b` → `ttyACM1` — **IC-705 Serial Port B** (not CI-V). Per the same reference, this port carries whatever the radio's "USB (B) Function" menu is configured for: GPS NMEA out, low-speed (1200 bps) / high-speed (9600 bps) packet/DV data, or CW/RTTY keying via DTR/RTS (settings 01-04 on the `USB SEND` / `USB Keying` CI-V commands, p. 9). Not used by anything in this workspace.
+
+### Audio device
+
+USB Audio CODEC (Burr-Brown from TI, built into the IC-705). Use `ssh shack aplay -L` and `ssh shack arecord -L` to get the exact ALSA names before hard-coding — they vary with kernel/PipeWire versions. At time of writing: `hw:CARD=CODEC,DEV=0` (ALSA direct) and `plughw:CARD=CODEC,DEV=0`. cpal identifies it by the description "USB Audio CODEC".
+
+### Running on shack
+
+Cross-compile for `aarch64-unknown-linux-gnu`, scp the binary, run over ssh. See `sidebridge/Justfile` and `civlink/Justfile` for recipes (`just upload`, `just poll`, `just client ...`, `just deploy`). civlink normally runs as a long-lived process on shack and holds `/dev/ic-705a`; stop it (`ssh shack pkill civlink`) before running standalone tools like `civ-client` against the serial port, then restart when done.
+
+**TX safety**: never send PTT or any TX-causing CI-V command from automated tests — always ask the operator first.
