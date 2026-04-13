@@ -233,11 +233,12 @@ pub fn parse_scope_setting(sub_cmd: u8, data: &[u8]) -> Result<ScopeSetting, Sco
             Ok(ScopeSetting::CenterFixedMode(mode))
         }
         0x15 => {
-            // Span: 6 BCD bytes encoding Hz
+            // Span response: <selector=0x00> <5 BCD bytes> (same BCD layout as
+            // the frequency command, covering 1 Hz through 1 GHz digits).
             if data.len() < 6 {
                 return Err(ScopeParseError::InsufficientData { need: 6, got: data.len() });
             }
-            let span_hz = parse_bcd_to_u64(&data[..6]);
+            let span_hz = parse_bcd_to_u64(&data[1..6]);
             Ok(ScopeSetting::Span(span_hz))
         }
         0x17 => {
@@ -580,9 +581,10 @@ mod tests {
 
     #[test]
     fn test_parse_setting_span() {
-        // Span setting (cmd 27 15) uses 6 BCD bytes on the wire
+        // Span setting (cmd 27 15) response: selector byte + 5 BCD bytes
         // 50000 Hz = 50 kHz
-        let span_bytes = encode_bcd_n(50_000, 6);
+        let mut span_bytes = vec![0x00];
+        span_bytes.extend_from_slice(&encode_bcd_n(50_000, 5));
         let result = parse_scope_setting(0x15, &span_bytes).unwrap();
         assert_eq!(result, ScopeSetting::Span(50_000));
     }

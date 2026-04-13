@@ -30,15 +30,15 @@ fn encode_freq_bcd(mut freq: u64, buf: &mut [u8; 16]) -> usize {
     5
 }
 
-fn encode_span_bcd(mut span: u64, buf: &mut [u8; 16]) -> usize {
-    for b in buf.iter_mut().take(6) {
+fn encode_span_bcd(mut span: u64, buf: &mut [u8]) -> usize {
+    for b in buf.iter_mut().take(5) {
         let low = (span % 10) as u8;
         span /= 10;
         let high = (span % 10) as u8;
         span /= 10;
         *b = (high << 4) | low;
     }
-    6
+    5
 }
 
 impl CivPacket {
@@ -154,7 +154,9 @@ impl CivPacket {
     /// `span_hz` should be one of: 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000.
     pub fn scope_span(span_hz: u64) -> Self {
         let mut pkt = Self::new(CivCommandCode::ScopeSpan);
-        pkt.data_len = encode_span_bcd(span_hz, &mut pkt.data);
+        pkt.data[0] = 0x00; // VFO selector
+        let n = encode_span_bcd(span_hz, &mut pkt.data[1..]);
+        pkt.data_len = 1 + n;
         pkt
     }
 
@@ -294,11 +296,11 @@ mod tests {
 
     #[test]
     fn test_scope_span_serialize() {
-        // 100000 Hz (100 kHz) → BCD LE: [0x00, 0x00, 0x10, 0x00, 0x00, 0x00]
+        // 100000 Hz (100 kHz) → selector + 5 BCD LE bytes: [0x00, 0x00, 0x00, 0x10, 0x00, 0x00]
         let pkt = CivPacket::scope_span(100_000);
         assert_eq!(
             pkt.serialize(),
-            vec![0xfe, 0xfe, 0xa4, 0xe0, 0x27, 0x15, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0xfd]
+            vec![0xfe, 0xfe, 0xa4, 0xe0, 0x27, 0x15, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0xfd]
         );
     }
 

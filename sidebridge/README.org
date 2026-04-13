@@ -29,6 +29,101 @@ The =civ= submodule (under =drivers/icom=) provides a complete CI-V protocol sta
 - =CivPacket= - stack-allocated packet for construction and serialization
 - =parser= - =nom=-based frame parser with BCD frequency encoding/decoding
 
+*** Protocol overview
+
+CI-V (Communications Interface V) is Icom's rig-control protocol. It runs
+over an asynchronous serial byte stream (USB-CDC or a TTL/RS-232 bus) at
+4800 - 115200 baud, typically 115200 on modern radios like the IC-705 /
+IC-7300. Controllers and radios share the same bus; every station has a
+one-byte CI-V address (IC-705 = =0xA4=, IC-7300/MK2 = =0xB6=,
+controllers conventionally = =0xE0=).
+
+**** Frame format
+
+Every frame is a variable-length packet wrapped in a fixed preamble and
+terminator:
+
+#+begin_example
+  FE FE <dest> <src> <cmd> [<sub-cmd>] [<data>...] FD
+  └───┬──┘ └──┬─┘ └─┬─┘ └──┬──┘ └───┬───┘ └───┬───┘ └┬┘
+   preamble  │    │       │        │         │       EOM
+         target  source  cmd    optional    optional
+                                 sub-cmd      data
+#+end_example
+
+Example (controller reading the IC-705's frequency): =FE FE A4 E0 03 FD=.
+
+The parser in =drivers/icom/civ/parser.rs= uses =nom=: it tags the =FE FE=
+preamble, consumes up to =FD=, then dispatches on =cmd= / =sub-cmd= to
+decode the payload. The codec (=drivers/icom/civ/codec.rs=) handles
+frame resynchronisation on noisy lines by scanning for =FE FE= and
+discarding preceding garbage, so a dropped byte only costs one frame.
+
+Responses from the radio come in two common shapes:
+
+- *Acknowledgement* to a set command: =FB= (OK) or =FA= (NG, "not good").
+- *Read-reply* to a query: same =cmd= / =sub-cmd= echoed back with the
+  data area filled in.
+
+Some commands (like scope waveform output, =27 00=) are unsolicited once
+enabled - the radio streams frames continuously until told to stop.
+
+**** BCD frequency encoding
+
+Frequencies and other numeric fields are sent as *little-endian
+binary-coded decimal* (BCD), not as integers. Each byte packs two decimal
+digits: the *high nibble is the more significant digit*, the *low nibble
+the less significant*. Bytes are ordered least-significant first.
+
+Frequency uses 5 bytes, covering digits 1 Hz up to 1 GHz:
+
+#+begin_example
+  byte 0:  [10 Hz | 1 Hz]
+  byte 1:  [1 kHz | 100 Hz]
+  byte 2:  [100 kHz | 10 kHz]
+  byte 3:  [10 MHz | 1 MHz]
+  byte 4:  [1 GHz | 100 MHz]
+#+end_example
+
+Example - encode 14 074 000 Hz (14.074 MHz, the FT8 watering hole):
+
+#+begin_example
+  14_074_000 Hz  →  00 40 07 14 00
+                    └┬┘ └┬┘ └┬┘ └┬┘ └┬┘
+                     │   │   │   │   └─ 1 GHz / 100 MHz = 0,0
+                     │   │   │   └───── 10 MHz / 1 MHz   = 1,4
+                     │   │   └───────── 100 kHz / 10 kHz = 0,7
+                     │   └───────────── 1 kHz / 100 Hz   = 4,0
+                     └───────────────── 10 Hz / 1 Hz     = 0,0
+#+end_example
+
+On the wire (full read-frequency response from an IC-705):
+
+#+begin_example
+  FE FE E0 A4 03 00 40 07 14 00 FD
+#+end_example
+
+Scope span (cmd =27 15=) reuses the same layout but prefixes a VFO
+selector byte: =00 <5 BCD bytes>=, so 100 kHz span = =00 00 00 00 10 00=.
+Several other sub-27 commands (mode/fixed toggle, hold, sweep speed)
+share this selector-byte convention.
+
+**** Meters (sub-commands of =15=)
+
+Single-byte BCD percentages, 0 - 255 mapped to 0 - 100 %:
+
+- =15 02= S-meter (receive signal strength)
+- =15 11= RF power (transmit)
+- =15 12= SWR
+- =15 13= ALC
+
+**** References
+
+The authoritative command tables live in the manufacturer PDFs under
+=sidebridge/docs/= - search with =rga= (ripgrep-all), e.g.
+=rga "27 15" sidebridge/docs/=. Key docs:
+=IC-705_ENG_CI-V_1_20200721.pdf=, =IC-7300MK2_ENG_CI-V_0.pdf=.
+
 ** Binaries
 
 In the examples below, =shack= is used as a hostname for the remote machine (e.g. a Raspberry Pi reachable via tailscale or SSH config).
