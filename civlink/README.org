@@ -51,7 +51,7 @@ See [[file:TODO.org][TODO.org]] for the roadmap and planned features.
   │  └──────────┘ └──────────────┘         │            │
   │  ┌─────────────────────────────────────┴────────┐   │
   │  │  Audio pipeline                              │   │
-  │  │  cpal ←→ ringbuf ←→ opus ←→ WebRTC tracks   │    │
+  │  │  cpal ←→ ringbuf ←→ opus ←→ WebRTC tracks    │   │
   │  └──────────────────────────────────────────────┘   │
   │  ┌──────────────────────────────────────────────┐   │
   │  │  Radio control                               │   │
