@@ -3,6 +3,7 @@ import VfoDisplay from "./VfoDisplay";
 import Spectrum from "./Spectrum";
 import AudioControls from "./AudioControls";
 import { createPeerConnection, type PeerConnectionResult } from "../api/webrtc";
+import type { ScopeFreq, ScopeMode } from "../types/radio";
 
 interface RadioPanelProps {
   token: string;
@@ -17,8 +18,9 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
   const [frequency, setFrequency] = createSignal(0);
   const [mode, setMode] = createSignal("Usb");
   const [filter, setFilter] = createSignal(1);
-  const [centerHz, setCenterHz] = createSignal(0);
-  const [spanHz, setSpanHz] = createSignal(0);
+  const [scopeFreq, setScopeFreq] = createSignal<ScopeFreq | undefined>();
+  const [scopeMode, setScopeMode] = createSignal<ScopeMode>("center");
+  const [fixedEdge, setFixedEdge] = createSignal(1);
   let conn: PeerConnectionResult | undefined;
 
   const disconnect = () => {
@@ -48,13 +50,8 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
 
       result.onScopeFrame((frame) => {
         setBins(frame.bins);
-        if (frame.freq.mode === "center") {
-          setCenterHz(frame.freq.center_hz);
-          setSpanHz(frame.freq.span_hz);
-        } else {
-          setCenterHz((frame.freq.lower_hz + frame.freq.upper_hz) / 2);
-          setSpanHz(frame.freq.upper_hz - frame.freq.lower_hz);
-        }
+        setScopeFreq(frame.freq);
+        setScopeMode(frame.freq.mode);
       });
 
       result.onFrequency((hz) => {
@@ -124,13 +121,22 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
       <div class="spectrum-section">
         <Spectrum
           bins={bins()}
-          centerHz={centerHz()}
-          spanHz={spanHz()}
+          scopeFreq={scopeFreq()}
           frequency={frequency()}
           mode={mode()}
           filter={filter()}
+          scopeMode={scopeMode()}
+          fixedEdge={fixedEdge()}
           onClickFrequency={(hz) => conn?.sendCommand({ type: "set_frequency", data: hz })}
           onSpanChange={(hz) => conn?.sendCommand({ type: "set_scope_span", data: hz })}
+          onScopeModeChange={(m) => {
+            setScopeMode(m);
+            conn?.sendCommand({ type: "set_scope_mode", data: m });
+          }}
+          onFixedEdgeChange={(edge) => {
+            setFixedEdge(edge);
+            conn?.sendCommand({ type: "set_scope_fixed_edge", data: edge });
+          }}
         />
       </div>
       <div class="controls-bar">

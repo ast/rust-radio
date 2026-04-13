@@ -150,6 +150,17 @@ impl CivPacket {
         pkt
     }
 
+    /// Select one of the radio's stored Fixed-mode edge presets (1, 2, or 3)
+    /// for the currently tuned band. Wire format: `27 16 00 0E` where `E` is
+    /// the edge number. See IC-705 CI-V reference p. 16, IC-7300 MK2 p. 25.
+    pub fn scope_fixed_edge(edge: u8) -> Self {
+        let mut pkt = Self::new(CivCommandCode::ScopeFixedEdge);
+        pkt.data[0] = 0x00;
+        pkt.data[1] = edge & 0x0f;
+        pkt.data_len = 2;
+        pkt
+    }
+
     /// Set the scope span in center mode.
     /// `span_hz` should be one of: 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000.
     pub fn scope_span(span_hz: u64) -> Self {
@@ -291,6 +302,15 @@ mod tests {
         assert_eq!(
             pkt.serialize(),
             vec![0xfe, 0xfe, 0xa4, 0xe0, 0x27, 0x14, 0x00, 0x01, 0xfd]
+        );
+    }
+
+    #[test]
+    fn test_scope_fixed_edge_serialize() {
+        let pkt = CivPacket::scope_fixed_edge(2);
+        assert_eq!(
+            pkt.serialize(),
+            vec![0xfe, 0xfe, 0xa4, 0xe0, 0x27, 0x16, 0x00, 0x02, 0xfd]
         );
     }
 

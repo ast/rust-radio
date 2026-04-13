@@ -22,4 +22,13 @@ impl RadioScope for IcomRadio {
     async fn set_scope_span(&self, span_hz: u64) -> Result<()> {
         self.expect_ok(CivPacket::scope_span(span_hz)).await
     }
+
+    async fn set_scope_mode(&self, mode: ScopeMode) -> Result<()> {
+        let fixed = matches!(mode, ScopeMode::Fixed);
+        self.expect_ok(CivPacket::scope_center_fixed(fixed)).await
+    }
+
+    async fn set_scope_fixed_edge(&self, edge: u8) -> Result<()> {
+        self.expect_ok(CivPacket::scope_fixed_edge(edge)).await
+    }
 }

@@ -148,7 +148,8 @@ impl TryFrom<&[u8]> for CivFrame {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::super::scope::{ScopeMode, ScopeSetting};
+    use super::super::scope::ScopeSetting;
+    use crate::traits::ScopeMode;
 
     #[test]
     fn test_parse_scope_on_off_frame() {

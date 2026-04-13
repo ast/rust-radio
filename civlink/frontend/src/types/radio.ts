@@ -16,7 +16,11 @@ export type RadioEvent =
   | { type: "swr"; data: number }
   | { type: "alc"; data: number };
 
+export type ScopeMode = "center" | "fixed";
+
 export type RadioCommand =
   | { type: "set_frequency"; data: number }
   | { type: "set_mode"; data: string }
-  | { type: "set_scope_span"; data: number };
+  | { type: "set_scope_span"; data: number }
+  | { type: "set_scope_mode"; data: ScopeMode }
+  | { type: "set_scope_fixed_edge"; data: number };

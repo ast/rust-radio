@@ -1,12 +1,11 @@
 // Copyright (c) SM6WJM 2026
 
-use std::fmt;
 use thiserror::Error;
 
 use arrayvec::ArrayVec;
 
 use super::parser::parse_bcd_to_u64;
-use crate::traits::{ScopeFrame, ScopeFreq, MAX_SCOPE_BINS};
+use crate::traits::{ScopeFrame, ScopeFreq, ScopeMode, MAX_SCOPE_BINS};
 
 /// Number of amplitude bins in a complete IC-705 scope frame.
 pub const SCOPE_BINS: usize = 475;
@@ -15,29 +14,12 @@ pub const SCOPE_BINS: usize = 475;
 // Types
 // ---------------------------------------------------------------------------
 
-/// Scope display mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ScopeMode {
-    Center,
-    Fixed,
-}
-
-impl ScopeMode {
-    pub fn from_byte(b: u8) -> Result<Self, ScopeParseError> {
-        match b {
-            0x00 => Ok(ScopeMode::Center),
-            0x01 => Ok(ScopeMode::Fixed),
-            other => Err(ScopeParseError::InvalidMode(other)),
-        }
-    }
-}
-
-impl fmt::Display for ScopeMode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ScopeMode::Center => write!(f, "Center"),
-            ScopeMode::Fixed => write!(f, "Fixed"),
-        }
+/// Decode a scope mode byte from a CI-V frame.
+pub fn scope_mode_from_byte(b: u8) -> Result<ScopeMode, ScopeParseError> {
+    match b {
+        0x00 => Ok(ScopeMode::Center),
+        0x01 => Ok(ScopeMode::Fixed),
+        other => Err(ScopeParseError::InvalidMode(other)),
     }
 }
 
@@ -132,7 +114,7 @@ pub fn parse_scope_wave(data: &[u8]) -> Result<ScopeWaveData, ScopeParseError> {
             return Err(ScopeParseError::InsufficientData { need: 4, got: data.len() });
         }
 
-        let mode = ScopeMode::from_byte(data[3])?;
+        let mode = scope_mode_from_byte(data[3])?;
         let rest = &data[4..];
 
         let (freq_info, after_freq) = parse_freq_info(mode, rest)?;
@@ -229,7 +211,7 @@ pub fn parse_scope_setting(sub_cmd: u8, data: &[u8]) -> Result<ScopeSetting, Sco
             if data.len() < 2 {
                 return Err(ScopeParseError::InsufficientData { need: 2, got: data.len() });
             }
-            let mode = ScopeMode::from_byte(data[1])?;
+            let mode = scope_mode_from_byte(data[1])?;
             Ok(ScopeSetting::CenterFixedMode(mode))
         }
         0x15 => {

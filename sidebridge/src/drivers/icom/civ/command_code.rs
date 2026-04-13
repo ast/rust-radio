@@ -68,6 +68,7 @@ pub enum CivCommandCode {
     ScopeWaveOutput,   // 0x27 0x11
     ScopeCenterFixed,  // 0x27 0x14
     ScopeSpan,         // 0x27 0x15
+    ScopeFixedEdge,    // 0x27 0x16
     ScopeHold,         // 0x27 0x17
     ScopeSweepSpeed,   // 0x27 0x1A
 
@@ -124,6 +125,7 @@ impl CivCommandCode {
             | Self::ScopeWaveOutput
             | Self::ScopeCenterFixed
             | Self::ScopeSpan
+            | Self::ScopeFixedEdge
             | Self::ScopeHold
             | Self::ScopeSweepSpeed => 0x27,
 
@@ -156,6 +158,7 @@ impl CivCommandCode {
             Self::ScopeWaveOutput => Some(0x11),
             Self::ScopeCenterFixed => Some(0x14),
             Self::ScopeSpan => Some(0x15),
+            Self::ScopeFixedEdge => Some(0x16),
             Self::ScopeHold => Some(0x17),
             Self::ScopeSweepSpeed => Some(0x1a),
 
@@ -255,6 +258,7 @@ impl CivCommandCode {
             (0x27, Some(0x11)) => Some(Self::ScopeWaveOutput),
             (0x27, Some(0x14)) => Some(Self::ScopeCenterFixed),
             (0x27, Some(0x15)) => Some(Self::ScopeSpan),
+            (0x27, Some(0x16)) => Some(Self::ScopeFixedEdge),
             (0x27, Some(0x17)) => Some(Self::ScopeHold),
             (0x27, Some(0x1a)) => Some(Self::ScopeSweepSpeed),
 
@@ -331,6 +335,7 @@ mod tests {
             CivCommandCode::ScopeWaveOutput,
             CivCommandCode::ScopeCenterFixed,
             CivCommandCode::ScopeSpan,
+            CivCommandCode::ScopeFixedEdge,
             CivCommandCode::ScopeHold,
             CivCommandCode::ScopeSweepSpeed,
             CivCommandCode::Ok,

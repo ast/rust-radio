@@ -1,14 +1,18 @@
-import { type Component, createEffect, onMount, For } from "solid-js";
+import { type Component, createEffect, onMount, For, Show } from "solid-js";
+import type { ScopeFreq, ScopeMode } from "../types/radio";
 
 interface SpectrumProps {
   bins: number[];
-  centerHz?: number;
-  spanHz?: number;
+  scopeFreq?: ScopeFreq;
   frequency?: number;
   mode?: string;
   filter?: number;
+  scopeMode: ScopeMode;
+  fixedEdge: number;
   onClickFrequency?: (hz: number) => void;
   onSpanChange?: (spanHz: number) => void;
+  onScopeModeChange?: (mode: ScopeMode) => void;
+  onFixedEdgeChange?: (edge: number) => void;
 }
 
 // IC-705 valid scope spans (center mode)
@@ -22,6 +26,8 @@ const SPANS: { label: string; hz: number }[] = [
   { label: "±250k",  hz:  250_000 },
   { label: "±500k",  hz:  500_000 },
 ];
+
+const EDGES = [1, 2, 3];
 
 const CANVAS_WIDTH = 800;
 const SPECTRUM_HEIGHT = 100;
@@ -37,40 +43,31 @@ function binToColor(value: number): [number, number, number] {
   const t = Math.min(value / BIN_MAX, 1.0);
 
   if (t < 0.2) {
-    // Black -> dark blue
     const s = t / 0.2;
     return [0, 0, Math.round(s * 80)];
   } else if (t < 0.35) {
-    // Dark blue -> blue
     const s = (t - 0.2) / 0.15;
     return [0, 0, Math.round(80 + s * 175)];
   } else if (t < 0.5) {
-    // Blue -> cyan
     const s = (t - 0.35) / 0.15;
     return [0, Math.round(s * 255), 255];
   } else if (t < 0.65) {
-    // Cyan -> green
     const s = (t - 0.5) / 0.15;
     return [0, 255, Math.round(255 * (1 - s))];
   } else if (t < 0.8) {
-    // Green -> yellow
     const s = (t - 0.65) / 0.15;
     return [Math.round(s * 255), 255, 0];
   } else if (t < 0.9) {
-    // Yellow -> red
     const s = (t - 0.8) / 0.1;
     return [255, Math.round(255 * (1 - s)), 0];
   } else {
-    // Red -> white
     const s = (t - 0.9) / 0.1;
     return [255, Math.round(s * 255), Math.round(s * 255)];
   }
 }
 
 // IC-705 factory default IF filter widths (Hz) per mode and filter preset.
-// FIL1 is widest, FIL3 is narrowest. These are approximate factory defaults.
 const FILTER_WIDTHS: Record<string, [number, number, number]> = {
-  // [FIL1, FIL2, FIL3]
   Lsb:     [3000, 2400, 500],
   Usb:     [3000, 2400, 500],
   Am:      [9000, 6000, 3000],
@@ -84,7 +81,6 @@ const FILTER_WIDTHS: Record<string, [number, number, number]> = {
   DataFm:  [15000, 10000, 7000],
 };
 
-/** Get filter width in Hz for current mode and filter preset (1-3) */
 function getFilterWidth(mode?: string, filter?: number): number {
   if (!mode) return 3000;
   const widths = FILTER_WIDTHS[mode];
@@ -93,9 +89,27 @@ function getFilterWidth(mode?: string, filter?: number): number {
   return widths[idx];
 }
 
-/** Convert a frequency to a canvas X pixel position */
-function freqToX(freq: number, centerHz: number, spanHz: number): number {
-  return ((freq - centerHz + spanHz / 2) / spanHz) * CANVAS_WIDTH;
+/** Passband extent relative to the VFO marker for each demodulation mode.
+ *  Returns [lowOffset, highOffset] in Hz (negative = below marker). */
+function passbandOffsets(mode: string | undefined, filterHz: number): [number, number] {
+  switch (mode) {
+    case "Usb":
+    case "DataUsb":
+      return [0, filterHz];
+    case "Lsb":
+    case "DataLsb":
+      return [-filterHz, 0];
+    default:
+      // CW/RTTY/FM/AM — symmetric around VFO
+      return [-filterHz / 2, filterHz / 2];
+  }
+}
+
+function scopeRange(f: ScopeFreq): { leftHz: number; rightHz: number } {
+  if (f.mode === "center") {
+    return { leftHz: f.center_hz - f.span_hz / 2, rightHz: f.center_hz + f.span_hz / 2 };
+  }
+  return { leftHz: f.lower_hz, rightHz: f.upper_hz };
 }
 
 const MARKER_COLOR = "rgba(255, 50, 50, 0.9)";
@@ -107,13 +121,13 @@ const Spectrum: Component<SpectrumProps> = (props) => {
   let wfCanvas: HTMLCanvasElement | undefined;
 
   const handleCanvasClick = (e: MouseEvent) => {
-    const center = props.centerHz;
-    const span = props.spanHz;
-    if (!center || !span || !props.onClickFrequency) return;
+    const sf = props.scopeFreq;
+    if (!sf || !props.onClickFrequency) return;
+    const { leftHz, rightHz } = scopeRange(sf);
     const canvas = e.currentTarget as HTMLCanvasElement;
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
-    const freq = center - span / 2 + x * span;
+    const freq = leftHz + x * (rightHz - leftHz);
     props.onClickFrequency(Math.round(freq));
   };
 
@@ -147,7 +161,6 @@ const Spectrum: Component<SpectrumProps> = (props) => {
       const n = bins.length;
       const xStep = CANVAS_WIDTH / n;
 
-      // Filled area
       ctx.beginPath();
       ctx.moveTo(0, SPECTRUM_HEIGHT);
       for (let i = 0; i < n; i++) {
@@ -159,7 +172,6 @@ const Spectrum: Component<SpectrumProps> = (props) => {
       ctx.fillStyle = FILL_COLOR;
       ctx.fill();
 
-      // Line trace
       ctx.beginPath();
       for (let i = 0; i < n; i++) {
         const y = SPECTRUM_HEIGHT - (bins[i] / BIN_MAX) * SPECTRUM_HEIGHT;
@@ -172,35 +184,36 @@ const Spectrum: Component<SpectrumProps> = (props) => {
       ctx.stroke();
 
       // --- Tuning indicator + filter passband ---
-      const center = props.centerHz;
-      const span = props.spanHz;
+      const sf = props.scopeFreq;
       const freq = props.frequency;
-      if (center && span && freq) {
-        const cx = freqToX(freq, center, span);
-        const filterHz = getFilterWidth(props.mode, props.filter);
-        const halfW = (filterHz / span) * CANVAS_WIDTH / 2;
+      if (sf && freq) {
+        const { leftHz, rightHz } = scopeRange(sf);
+        const widthHz = rightHz - leftHz;
+        if (widthHz > 0 && freq >= leftHz && freq <= rightHz) {
+          const hzToX = (hz: number) => ((hz - leftHz) / widthHz) * CANVAS_WIDTH;
+          const cx = hzToX(freq);
+          const filterHz = getFilterWidth(props.mode, props.filter);
+          const [loOff, hiOff] = passbandOffsets(props.mode, filterHz);
+          const x0 = hzToX(freq + loOff);
+          const x1 = hzToX(freq + hiOff);
 
-        // Passband fill
-        ctx.fillStyle = PASSBAND_COLOR;
-        ctx.fillRect(cx - halfW, 0, halfW * 2, SPECTRUM_HEIGHT);
+          ctx.fillStyle = PASSBAND_COLOR;
+          ctx.fillRect(x0, 0, x1 - x0, SPECTRUM_HEIGHT);
 
-        // Passband edges
-        ctx.strokeStyle = PASSBAND_EDGE_COLOR;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(cx - halfW, 0);
-        ctx.lineTo(cx - halfW, SPECTRUM_HEIGHT);
-        ctx.moveTo(cx + halfW, 0);
-        ctx.lineTo(cx + halfW, SPECTRUM_HEIGHT);
-        ctx.stroke();
+          ctx.strokeStyle = PASSBAND_EDGE_COLOR;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(x0, 0); ctx.lineTo(x0, SPECTRUM_HEIGHT);
+          ctx.moveTo(x1, 0); ctx.lineTo(x1, SPECTRUM_HEIGHT);
+          ctx.stroke();
 
-        // Center line
-        ctx.strokeStyle = MARKER_COLOR;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(cx, 0);
-        ctx.lineTo(cx, SPECTRUM_HEIGHT);
-        ctx.stroke();
+          ctx.strokeStyle = MARKER_COLOR;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(cx, 0);
+          ctx.lineTo(cx, SPECTRUM_HEIGHT);
+          ctx.stroke();
+        }
       }
     }
 
@@ -209,10 +222,8 @@ const Spectrum: Component<SpectrumProps> = (props) => {
       const ctx = wfCanvas.getContext("2d")!;
       const n = bins.length;
 
-      // Scroll existing content down by 1 pixel
       ctx.drawImage(wfCanvas, 0, 0, CANVAS_WIDTH, WATERFALL_HEIGHT, 0, 1, CANVAS_WIDTH, WATERFALL_HEIGHT);
 
-      // Draw new row at top
       const row = ctx.createImageData(CANVAS_WIDTH, 1);
       const xStep = n / CANVAS_WIDTH;
       for (let x = 0; x < CANVAS_WIDTH; x++) {
@@ -228,18 +239,50 @@ const Spectrum: Component<SpectrumProps> = (props) => {
     }
   });
 
+  const currentSpan = () => {
+    const sf = props.scopeFreq;
+    if (sf && sf.mode === "center") return sf.span_hz;
+    return 0;
+  };
+
   return (
     <>
       <div class="span-selector">
-        <span class="ctrl-label">Span</span>
-        <For each={SPANS}>{(s) =>
-          <button
-            class={`span-btn ${props.spanHz === s.hz ? "span-btn-active" : ""}`}
-            onClick={() => props.onSpanChange?.(s.hz)}
-          >
-            {s.label}
-          </button>
-        }</For>
+        <span class="ctrl-label">Scope</span>
+        <button
+          class={`span-btn ${props.scopeMode === "center" ? "span-btn-active" : ""}`}
+          onClick={() => props.onScopeModeChange?.("center")}
+        >
+          Center
+        </button>
+        <button
+          class={`span-btn ${props.scopeMode === "fixed" ? "span-btn-active" : ""}`}
+          onClick={() => props.onScopeModeChange?.("fixed")}
+        >
+          Fixed
+        </button>
+        <Show when={props.scopeMode === "center"}>
+          <span class="ctrl-label">Span</span>
+          <For each={SPANS}>{(s) =>
+            <button
+              class={`span-btn ${currentSpan() === s.hz ? "span-btn-active" : ""}`}
+              onClick={() => props.onSpanChange?.(s.hz)}
+            >
+              {s.label}
+            </button>
+          }</For>
+        </Show>
+        <Show when={props.scopeMode === "fixed"}>
+          <span class="ctrl-label">Edge</span>
+          <For each={EDGES}>{(n) =>
+            <button
+              class={`span-btn ${props.fixedEdge === n ? "span-btn-active" : ""}`}
+              onClick={() => props.onFixedEdgeChange?.(n)}
+            >
+              {n}
+            </button>
+          }</For>
+        </Show>
       </div>
       <canvas ref={specCanvas} width={CANVAS_WIDTH} height={SPECTRUM_HEIGHT} class="spectrum-clickable" onClick={handleCanvasClick} />
       <canvas ref={wfCanvas} width={CANVAS_WIDTH} height={WATERFALL_HEIGHT} class="spectrum-clickable" style={{ display: "block" }} onClick={handleCanvasClick} />

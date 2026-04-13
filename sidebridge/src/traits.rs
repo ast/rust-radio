@@ -96,6 +96,17 @@ pub enum ScopeFreq {
     Fixed { lower_hz: u64, upper_hz: u64 },
 }
 
+/// Scope display mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScopeMode {
+    /// Operating frequency is always at the screen center.
+    Center,
+    /// Display spans a fixed frequency range selected from the radio's
+    /// stored edge presets (1–3 on IC-705 / IC-7300).
+    Fixed,
+}
+
 /// Spectrum scope frame for waterfall rendering.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScopeFrame {
@@ -128,6 +139,9 @@ pub enum RadioCommand {
     SetFrequency(u64),
     SetMode(Mode),
     SetScopeSpan(u64),
+    SetScopeMode(ScopeMode),
+    /// Select one of the radio's stored fixed-edge presets for the current band (1–3).
+    SetScopeFixedEdge(u8),
 }
 
 // ---------------------------------------------------------------------------
@@ -203,4 +217,11 @@ pub trait RadioScope: Radio {
     /// Set the scope span in center mode.
     /// Valid values: 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000 Hz.
     async fn set_scope_span(&self, span_hz: u64) -> Result<()>;
+
+    /// Switch the scope between Center and Fixed display modes.
+    async fn set_scope_mode(&self, mode: ScopeMode) -> Result<()>;
+
+    /// Select one of the radio's stored Fixed-mode edge presets (1, 2, or 3)
+    /// for the band the VFO is currently tuned to.
+    async fn set_scope_fixed_edge(&self, edge: u8) -> Result<()>;
 }

@@ -169,6 +169,18 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                                                 tracing::error!("set_scope_span failed: {e}");
                                             }
                                         }
+                                        RadioCommand::SetScopeMode(mode) => {
+                                            use sidebridge::RadioScope;
+                                            if let Err(e) = radio.radio().set_scope_mode(mode).await {
+                                                tracing::error!("set_scope_mode failed: {e}");
+                                            }
+                                        }
+                                        RadioCommand::SetScopeFixedEdge(edge) => {
+                                            use sidebridge::RadioScope;
+                                            if let Err(e) = radio.radio().set_scope_fixed_edge(edge).await {
+                                                tracing::error!("set_scope_fixed_edge failed: {e}");
+                                            }
+                                        }
                                     }
                                 }
                             }
