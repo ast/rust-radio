@@ -106,18 +106,8 @@ export async function createPeerConnection(
     }
   });
 
-  // Connect signaling and create offer
-  signaling.connect(token);
-
-  // Wait for WebSocket to open before sending offer
-  await new Promise<void>((resolve) => {
-    const check = setInterval(() => {
-      if (signaling.isOpen()) {
-        clearInterval(check);
-        resolve();
-      }
-    }, 50);
-  });
+  // Connect signaling and wait for the socket to open before sending offer
+  await signaling.connect(token);
 
   // We need to add a transceiver for receiving audio (recvonly)
   pc.addTransceiver("audio", { direction: "recvonly" });
