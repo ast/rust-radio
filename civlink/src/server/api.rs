@@ -31,7 +31,7 @@ pub async fn validate(
     State(state): State<Arc<AppState>>,
     Json(req): Json<ValidateRequest>,
 ) -> impl IntoResponse {
-    if state.sessions.get_username(&req.token).await.is_some() {
+    if state.sessions.username(&req.token).await.is_some() {
         StatusCode::OK.into_response()
     } else {
         StatusCode::UNAUTHORIZED.into_response()
