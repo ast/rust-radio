@@ -50,5 +50,5 @@ This is a Rust workspace for software-defined radio (SDR) and amateur radio cont
 - Async crates (`sidebridge`) use `tokio`; signal processing crates are synchronous
 - `airspyhf-sys` requires `libairspyhf` headers and library at build time; hardware-dependent tests are `#[ignore]`
 - POSIX syscalls (mmap, memfd_create, ftruncate) use the `nix` crate for safe wrappers, not raw `libc`
-- The CI-V parser in `sidebridge::icom_civ` uses `nom` for frame parsing
+- The CI-V parser in `sidebridge` (under `drivers/icom/civ`) uses `nom` for frame parsing
 - Radio protocol docs (CI-V, CAT PDFs) live in `sidebridge/docs/` — use `rga` (ripgrep-all) to search them: `rga "frequency" sidebridge/docs/`

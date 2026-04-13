@@ -21,7 +21,7 @@ Async radio control abstraction layer for amateur radio transceivers. Defines a 
 
 ** Icom CI-V
 
-The =icom_civ= module provides a complete CI-V protocol stack:
+The =civ= submodule (under =drivers/icom=) provides a complete CI-V protocol stack:
 
 - =CivFrame= - parsed CI-V frame (dest, src, command)
 - =CivCommand= - decoded commands: frequency, mode, PTT, S-meter, waterfall, OK/NG

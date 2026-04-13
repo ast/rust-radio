@@ -1,5 +1,6 @@
 // Copyright SM6WJM 2026
 
+pub mod civ;
 mod radio;
 mod radio_info;
 mod radio_meter;
@@ -14,10 +15,10 @@ use tokio_stream::StreamExt;
 use tokio_util::codec::Framed;
 use url::Url;
 
-use crate::icom_civ::codec::CivCodec;
-use crate::icom_civ::command::CivCommand;
-use crate::icom_civ::packet::CivPacket;
-use crate::icom_civ::scope::ScopeAssembler;
+use self::civ::codec::CivCodec;
+use self::civ::command::CivCommand;
+use self::civ::packet::CivPacket;
+use self::civ::scope::ScopeAssembler;
 use crate::traits::*;
 use crate::Transport;
 

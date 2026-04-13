@@ -1,7 +1,6 @@
 // Copyright SM6WJM 2026
 
 pub mod drivers;
-pub mod icom_civ;
 pub mod traits;
 pub mod transport;
 
@@ -12,10 +11,13 @@ pub use traits::{
 };
 
 // CI-V re-exports
-pub use icom_civ::command::CivCommand;
-pub use icom_civ::command_code::CivCommandCode;
-pub use icom_civ::frame::CivFrame;
-pub use icom_civ::scope::{ScopeAssembler, ScopeFreqInfo, ScopeMode, ScopeSetting, ScopeWaveData};
+pub use drivers::icom::civ::codec::CivCodec;
+pub use drivers::icom::civ::command::CivCommand;
+pub use drivers::icom::civ::command_code::CivCommandCode;
+pub use drivers::icom::civ::frame::CivFrame;
+pub use drivers::icom::civ::scope::{
+    ScopeAssembler, ScopeFreqInfo, ScopeMode, ScopeSetting, ScopeWaveData,
+};
 pub use transport::Transport;
 
 // Driver re-exports

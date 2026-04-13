@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 
-use crate::icom_civ::packet::CivPacket;
+use super::civ::packet::CivPacket;
 use crate::traits::*;
 
 use super::IcomRadio;

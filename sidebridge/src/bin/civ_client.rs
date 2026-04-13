@@ -6,7 +6,7 @@ use futures::{SinkExt, StreamExt};
 use tokio::net::TcpStream;
 use tokio_util::codec::Framed;
 
-use sidebridge::icom_civ::codec::CivCodec;
+use sidebridge::CivCodec;
 
 #[derive(Parser, Debug)]
 #[command(

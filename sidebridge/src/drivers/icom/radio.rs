@@ -3,8 +3,8 @@
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 
-use crate::icom_civ::command::CivCommand;
-use crate::icom_civ::packet::CivPacket;
+use super::civ::command::CivCommand;
+use super::civ::packet::CivPacket;
 use crate::traits::*;
 
 use super::{IcomRadio, mode_to_civ};

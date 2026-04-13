@@ -9,9 +9,9 @@ use nom::{
     number::complete::u8,
 };
 
-use crate::icom_civ::command::CivCommand;
-use crate::icom_civ::frame::CivFrame;
-use crate::icom_civ::scope;
+use super::command::CivCommand;
+use super::frame::CivFrame;
+use super::scope;
 
 #[derive(Error, Debug)]
 pub enum CivError {
@@ -148,7 +148,7 @@ impl TryFrom<&[u8]> for CivFrame {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::icom_civ::scope::{ScopeMode, ScopeSetting};
+    use super::super::scope::{ScopeMode, ScopeSetting};
 
     #[test]
     fn test_parse_scope_on_off_frame() {
