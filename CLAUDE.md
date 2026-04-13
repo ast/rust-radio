@@ -51,7 +51,13 @@ This is a Rust workspace for software-defined radio (SDR) and amateur radio cont
 - `airspyhf-sys` requires `libairspyhf` headers and library at build time; hardware-dependent tests are `#[ignore]`
 - POSIX syscalls (mmap, memfd_create, ftruncate) use the `nix` crate for safe wrappers, not raw `libc`
 - The CI-V parser in `sidebridge` (under `drivers/icom/civ`) uses `nom` for frame parsing
-- Radio protocol docs (CI-V, CAT PDFs) live in `sidebridge/docs/` — use `rga` (ripgrep-all) to search them: `rga "frequency" sidebridge/docs/`
+- Radio protocol docs (CI-V, CAT PDFs) live in `sidebridge/docs/` — use `rga` (ripgrep-all) to search them: `rga "frequency" sidebridge/docs/`. Available references:
+  - `IC-705_ENG_CI-V_1_20200721.pdf` — IC-705 CI-V command reference
+  - `IC-705_ENG_Advanced_4a.pdf` — IC-705 advanced user manual
+  - `IC-7300MK2_ENG_CI-V_0.pdf` — IC-7300 MK2 CI-V command reference
+  - `IC-7300_Full_English v6.pdf` — IC-7300 full user manual
+  - `FT-891_CAT_OM_ENG_1909-C.pdf` — Yaesu FT-891 CAT command reference
+  - `ysu-ft-891_it.pdf` — Yaesu FT-891 user manual (Italian)
 
 ## Test hardware (hostname `shack`)
 
