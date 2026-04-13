@@ -1,8 +1,11 @@
-import { type Component, createSignal, onMount, onCleanup } from "solid-js";
+import { type Component, Show, createEffect, createSignal, onMount, onCleanup } from "solid-js";
 import VfoDisplay from "./VfoDisplay";
 import Spectrum from "./Spectrum";
 import AudioControls from "./AudioControls";
+import StatusLine from "./StatusLine";
+import StatsGraph from "./StatsGraph";
 import { createPeerConnection, type PeerConnectionResult } from "../api/webrtc";
+import { StatsCollector, type ConnectionStats, type StatsSample } from "../api/stats";
 import type { ScopeFreq, ScopeMode } from "../types/radio";
 
 interface RadioPanelProps {
@@ -21,10 +24,18 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
   const [scopeFreq, setScopeFreq] = createSignal<ScopeFreq | undefined>();
   const [scopeMode, setScopeMode] = createSignal<ScopeMode>("center");
   const [fixedEdge, setFixedEdge] = createSignal(1);
+  const [showStats, setShowStats] = createSignal(true);
+  const [stats, setStats] = createSignal<ConnectionStats | null>(null);
+  const [statsHistory, setStatsHistory] = createSignal<StatsSample[]>([]);
   let conn: PeerConnectionResult | undefined;
+  let statsCollector: StatsCollector | undefined;
 
   const disconnect = () => {
     console.log("[radio-panel] disconnecting");
+    statsCollector?.stop();
+    statsCollector = undefined;
+    setStats(null);
+    setStatsHistory([]);
     conn?.signaling.close();
     conn?.pc.close();
     conn = undefined;
@@ -70,6 +81,11 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
           setError("Connection failed");
         }
       };
+
+      statsCollector = new StatsCollector(result.pc);
+      statsCollector.start();
+      createEffect(() => setStats(statsCollector!.current()));
+      createEffect(() => setStatsHistory(statsCollector!.history()));
     } catch (e) {
       console.error("[radio-panel] failed to connect:", e);
       setError("Failed to establish connection");
@@ -98,16 +114,32 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
     <div class="radio-panel">
       <div class="header-bar">
         <span class="header-title">civlink</span>
-        <div class="connection-status">
-          {error() ? (
-            <span class="status-error"><span class="status-dot" />{error()}</span>
-          ) : connected() ? (
-            <span class="status-connected"><span class="status-dot" />Connected</span>
-          ) : (
-            <span class="status-connecting"><span class="status-dot" />Connecting</span>
-          )}
+        <div class="header-right">
+          <button
+            class="stats-toggle"
+            classList={{ active: showStats() }}
+            onClick={() => setShowStats((s) => !s)}
+            title="Toggle connection stats"
+          >
+            stats
+          </button>
+          <div class="connection-status">
+            {error() ? (
+              <span class="status-error"><span class="status-dot" />{error()}</span>
+            ) : connected() ? (
+              <span class="status-connected"><span class="status-dot" />Connected</span>
+            ) : (
+              <span class="status-connecting"><span class="status-dot" />Connecting</span>
+            )}
+          </div>
         </div>
       </div>
+      <Show when={showStats() && stats()}>
+        <div class="stats-panel">
+          <StatusLine stats={stats()!} />
+          <StatsGraph history={statsHistory()} />
+        </div>
+      </Show>
       <VfoDisplay
         frequency={frequency()}
         mode={mode()}
