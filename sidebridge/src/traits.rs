@@ -129,6 +129,8 @@ pub enum RadioEvent {
     RfPower(u8),
     Swr(u8),
     Alc(u8),
+    /// RF gain level, 0–255 (Icom raw scale).
+    RfGain(u8),
 }
 
 /// Radio command — user-initiated actions sent from the frontend.
@@ -142,6 +144,8 @@ pub enum RadioCommand {
     SetScopeMode(ScopeMode),
     /// Select one of the radio's stored fixed-edge presets for the current band (1–3).
     SetScopeFixedEdge(u8),
+    /// RF gain (0–255).
+    SetRfGain(u8),
 }
 
 // ---------------------------------------------------------------------------
@@ -224,4 +228,14 @@ pub trait RadioScope: Radio {
     /// Select one of the radio's stored Fixed-mode edge presets (1, 2, or 3)
     /// for the band the VFO is currently tuned to.
     async fn set_scope_fixed_edge(&self, edge: u8) -> Result<()>;
+}
+
+/// Gain controls (RF gain, and potentially AF/mic gain in the future).
+#[async_trait]
+pub trait RadioGain: Radio {
+    /// Set RF gain level (0–255 on Icom radios).
+    async fn set_rf_gain(&self, value: u8) -> Result<()>;
+
+    /// Request the current RF gain. Result arrives as `RadioEvent::RfGain`.
+    async fn read_rf_gain(&self) -> Result<()>;
 }

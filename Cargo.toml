@@ -1,3 +1,3 @@
 [workspace]
 resolver = "2"
-members = ["airspyhf-sys", "airspyhf", "doublemap", "pool", "filters", "signals", "spectrum", "receiver", "rtp", "sideband", "sidebridge", "civlink"]
+members = ["airspyhf-sys", "airspyhf", "doublemap", "pool", "filters", "signals", "spectrum", "receiver", "rtp", "sideband", "sidebridge", "civlink", "sdrlink"]

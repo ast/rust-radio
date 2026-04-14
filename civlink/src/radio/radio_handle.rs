@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use sidebridge::{IcomRadio, Mode, Radio, RadioEvent, RadioScope, ScopeFrame};
+use sidebridge::{IcomRadio, Mode, Radio, RadioEvent, RadioGain, RadioScope, ScopeFrame};
 use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::{Stream, StreamExt};
@@ -97,6 +97,7 @@ impl RadioHandle {
             .await
             .map_err(CivlinkError::Radio)?;
         self.radio.read_mode().await.map_err(CivlinkError::Radio)?;
+        self.radio.read_rf_gain().await.map_err(CivlinkError::Radio)?;
         Ok(())
     }
 

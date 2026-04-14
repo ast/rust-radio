@@ -33,6 +33,9 @@ pub enum CivCommandCode {
     StartProgramScan,  // 0x0E 0x01
     StartDeltaFScan,   // 0x0E 0x03
 
+    // Levels (cmd 0x14)
+    RfGain,            // 0x14 0x02
+
     // Meters (cmd 0x15)
     ReadSquelchStatus, // 0x15 0x01
     ReadSmeter,        // 0x15 0x02
@@ -98,6 +101,8 @@ impl CivCommandCode {
 
             Self::CancelScan | Self::StartProgramScan | Self::StartDeltaFScan => 0x0e,
 
+            Self::RfGain => 0x14,
+
             Self::ReadSquelchStatus
             | Self::ReadSmeter
             | Self::ReadOvfStatus
@@ -151,6 +156,9 @@ impl CivCommandCode {
             | Self::MemoryClear
             | Self::Ok
             | Self::NotGood => None,
+
+            // Levels
+            Self::RfGain => Some(0x02),
 
             // Scope
             Self::ScopeWaveData => Some(0x00),
@@ -228,6 +236,8 @@ impl CivCommandCode {
             (0x0e, Some(0x00) | None) => Some(Self::CancelScan),
             (0x0e, Some(0x01)) => Some(Self::StartProgramScan),
             (0x0e, Some(0x03)) => Some(Self::StartDeltaFScan),
+
+            (0x14, Some(0x02)) => Some(Self::RfGain),
 
             (0x15, Some(0x01)) => Some(Self::ReadSquelchStatus),
             (0x15, Some(0x02)) => Some(Self::ReadSmeter),
@@ -311,6 +321,7 @@ mod tests {
             CivCommandCode::CancelScan,
             CivCommandCode::StartProgramScan,
             CivCommandCode::StartDeltaFScan,
+            CivCommandCode::RfGain,
             CivCommandCode::ReadSquelchStatus,
             CivCommandCode::ReadSmeter,
             CivCommandCode::ReadOvfStatus,

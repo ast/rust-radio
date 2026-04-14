@@ -86,6 +86,22 @@ fn parse_civ_command(cmd_byte: u8, data: &[u8]) -> CivCommand {
             }
         }
 
+        // Levels (cmd 0x14) — 4-digit BCD big-endian (0000–0255)
+        0x14 if data.len() >= 3 => match data[0] {
+            0x02 => {
+                let hundreds = data[1] & 0x0f;
+                let tens = (data[2] >> 4) & 0x0f;
+                let ones = data[2] & 0x0f;
+                let value = (hundreds as u16 * 100 + tens as u16 * 10 + ones as u16).min(255) as u8;
+                CivCommand::RfGain(value)
+            }
+            _ => CivCommand::Unknown {
+                cmd: 0x14,
+                sub: Some(data[0]),
+                data: data[1..].to_vec(),
+            },
+        },
+
         // Sub-commands
         0x15 if !data.is_empty() => match data[0] {
             0x02 => CivCommand::SignalMeter(parse_bcd_u8(&data[1..])),

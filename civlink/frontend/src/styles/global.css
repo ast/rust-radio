@@ -464,6 +464,13 @@ body {
   gap: 1rem;
 }
 
+.audio-controls-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+}
+
 .audio-controls {
   display: flex;
   align-items: center;

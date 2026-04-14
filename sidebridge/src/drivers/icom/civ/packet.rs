@@ -103,6 +103,23 @@ impl CivPacket {
         pkt
     }
 
+    /// Read the RF gain (0–255).
+    pub fn read_rf_gain() -> Self {
+        Self::new(CivCommandCode::RfGain)
+    }
+
+    /// Set the RF gain (0–255). Encoded as 4-digit BCD big-endian.
+    pub fn set_rf_gain(value: u8) -> Self {
+        let mut pkt = Self::new(CivCommandCode::RfGain);
+        let hundreds = value / 100;
+        let tens = (value / 10) % 10;
+        let ones = value % 10;
+        pkt.data[0] = hundreds;
+        pkt.data[1] = (tens << 4) | ones;
+        pkt.data_len = 2;
+        pkt
+    }
+
     /// Read the S-meter level.
     pub fn read_smeter() -> Self {
         Self::new(CivCommandCode::ReadSmeter)
@@ -238,6 +255,22 @@ mod tests {
         assert_eq!(
             bytes,
             vec![0xfe, 0xfe, 0xa4, 0xe0, 0x05, 0x00, 0x40, 0x07, 0x14, 0x00, 0xfd]
+        );
+    }
+
+    #[test]
+    fn test_set_rf_gain() {
+        // 128 → 0128 BCD → [0x01, 0x28]
+        let pkt = CivPacket::set_rf_gain(128);
+        assert_eq!(
+            pkt.serialize(),
+            vec![0xfe, 0xfe, 0xa4, 0xe0, 0x14, 0x02, 0x01, 0x28, 0xfd]
+        );
+        // 255 → 0255 BCD → [0x02, 0x55]
+        let pkt = CivPacket::set_rf_gain(255);
+        assert_eq!(
+            pkt.serialize(),
+            vec![0xfe, 0xfe, 0xa4, 0xe0, 0x14, 0x02, 0x02, 0x55, 0xfd]
         );
     }
 

@@ -12,6 +12,7 @@ pub enum CivCommand {
         filter: u8,
     }, // 0x01, 0x04, 0x06
     SetPtt(bool),         // 0x1c 0x00
+    RfGain(u8),           // 0x14 0x02 — 0-255
     SignalMeter(u8),      // 0x15 0x02
     RfPower(u8),          // 0x15 0x11
     Swr(u8),              // 0x15 0x12

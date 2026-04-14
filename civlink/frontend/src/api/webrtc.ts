@@ -9,6 +9,7 @@ export interface PeerConnectionResult {
   onScopeFrame: (handler: (frame: ScopeFrame) => void) => void;
   onFrequency: (handler: (hz: number) => void) => void;
   onMode: (handler: (mode: string, filter: number) => void) => void;
+  onRfGain: (handler: (value: number) => void) => void;
   sendCommand: (cmd: RadioCommand) => void;
 }
 
@@ -29,6 +30,7 @@ export async function createPeerConnection(
   let scopeHandler: ((frame: ScopeFrame) => void) | null = null;
   let freqHandler: ((hz: number) => void) | null = null;
   let modeHandler: ((mode: string, filter: number) => void) | null = null;
+  let rfGainHandler: ((value: number) => void) | null = null;
 
   // Handle remote tracks (audio from radio)
   pc.ontrack = (event) => {
@@ -98,6 +100,9 @@ export async function createPeerConnection(
           case "scope":
             if (scopeHandler) scopeHandler(event.data);
             break;
+          case "rf_gain":
+            if (rfGainHandler) rfGainHandler(event.data);
+            break;
         }
         break;
       }
@@ -125,6 +130,7 @@ export async function createPeerConnection(
     onScopeFrame: (handler) => { scopeHandler = handler; },
     onFrequency: (handler) => { freqHandler = handler; },
     onMode: (handler) => { modeHandler = handler; },
+    onRfGain: (handler) => { rfGainHandler = handler; },
     sendCommand: (cmd) => { signaling.send({ type: "radio-command", payload: cmd }); },
   };
 }

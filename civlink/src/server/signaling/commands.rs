@@ -1,6 +1,6 @@
 // Copyright SM6WJM 2026
 
-use sidebridge::{Radio, RadioCommand, RadioScope};
+use sidebridge::{Radio, RadioCommand, RadioGain, RadioScope};
 
 use crate::radio::RadioHandle;
 
@@ -19,6 +19,11 @@ pub async fn dispatch(radio: &RadioHandle, cmd: RadioCommand) {
         }
         RadioCommand::SetScopeFixedEdge(edge) => {
             log_err("set_scope_fixed_edge", radio.radio().set_scope_fixed_edge(edge).await);
+        }
+        RadioCommand::SetRfGain(val) => {
+            if log_err("set_rf_gain", radio.radio().set_rf_gain(val).await) {
+                let _ = radio.radio().read_rf_gain().await;
+            }
         }
     }
 }

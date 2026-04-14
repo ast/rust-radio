@@ -2,6 +2,7 @@
 
 pub mod civ;
 mod radio;
+mod radio_gain;
 mod radio_info;
 mod radio_meter;
 mod radio_scope;
@@ -153,6 +154,9 @@ impl IcomRadio {
                                     }
                                     CivCommand::Alc(val) => {
                                         let _ = event_tx.try_send(RadioEvent::Alc(*val));
+                                    }
+                                    CivCommand::RfGain(val) => {
+                                        let _ = event_tx.try_send(RadioEvent::RfGain(*val));
                                     }
                                     _ => {}
                                 }

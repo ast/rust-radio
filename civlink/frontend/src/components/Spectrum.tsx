@@ -131,6 +131,14 @@ const Spectrum: Component<SpectrumProps> = (props) => {
     props.onClickFrequency(Math.round(freq));
   };
 
+  const handleCanvasWheel = (e: WheelEvent) => {
+    if (!props.onClickFrequency || props.frequency === undefined) return;
+    e.preventDefault();
+    const step = e.shiftKey ? 1_000 : 100;
+    const delta = e.deltaY < 0 ? step : -step;
+    props.onClickFrequency(props.frequency + delta);
+  };
+
   onMount(() => {
     if (specCanvas) {
       specCanvas.width = CANVAS_WIDTH;
@@ -284,8 +292,8 @@ const Spectrum: Component<SpectrumProps> = (props) => {
           }</For>
         </Show>
       </div>
-      <canvas ref={specCanvas} width={CANVAS_WIDTH} height={SPECTRUM_HEIGHT} class="spectrum-clickable" onClick={handleCanvasClick} />
-      <canvas ref={wfCanvas} width={CANVAS_WIDTH} height={WATERFALL_HEIGHT} class="spectrum-clickable" style={{ display: "block" }} onClick={handleCanvasClick} />
+      <canvas ref={specCanvas} width={CANVAS_WIDTH} height={SPECTRUM_HEIGHT} class="spectrum-clickable" onClick={handleCanvasClick} onWheel={handleCanvasWheel} />
+      <canvas ref={wfCanvas} width={CANVAS_WIDTH} height={WATERFALL_HEIGHT} class="spectrum-clickable" style={{ display: "block" }} onClick={handleCanvasClick} onWheel={handleCanvasWheel} />
     </>
   );
 };

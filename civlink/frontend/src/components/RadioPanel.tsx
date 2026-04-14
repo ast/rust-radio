@@ -24,6 +24,7 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
   const [scopeFreq, setScopeFreq] = createSignal<ScopeFreq | undefined>();
   const [scopeMode, setScopeMode] = createSignal<ScopeMode>("center");
   const [fixedEdge, setFixedEdge] = createSignal(1);
+  const [rfGain, setRfGain] = createSignal(255);
   const [showStats, setShowStats] = createSignal(true);
   const [stats, setStats] = createSignal<ConnectionStats | null>(null);
   const [statsHistory, setStatsHistory] = createSignal<StatsSample[]>([]);
@@ -72,6 +73,10 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
       result.onMode((m, f) => {
         setMode(m);
         setFilter(f);
+      });
+
+      result.onRfGain((v) => {
+        setRfGain(v);
       });
 
       result.pc.onconnectionstatechange = () => {
@@ -175,7 +180,14 @@ const RadioPanel: Component<RadioPanelProps> = (props) => {
         {audioBlocked() ? (
           <button class="audio-start-btn" onClick={resumeAudio}>Start Audio</button>
         ) : (
-          <AudioControls audioElement={audioEl()} />
+          <AudioControls
+            audioElement={audioEl()}
+            rfGain={rfGain()}
+            onRfGainChange={(v) => {
+              setRfGain(v);
+              conn?.sendCommand({ type: "set_rf_gain", data: v });
+            }}
+          />
         )}
       </div>
     </div>
