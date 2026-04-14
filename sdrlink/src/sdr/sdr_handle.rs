@@ -8,9 +8,10 @@ use tokio::sync::broadcast;
 use crate::config::SdrConfig;
 use crate::error::{Result, SdrLinkError};
 
-use super::fm_pipeline::DemodHandle;
+use super::demod::Mode;
+use super::demod_pipeline::DemodHandle;
 use super::spectrum_worker::SpectrumFrame;
-use super::{IqBroker, airspyhf_source, fake_source, fm_pipeline, spectrum_worker};
+use super::{IqBroker, airspyhf_source, demod_pipeline, fake_source, spectrum_worker};
 
 /// AirspyHF+ delivers 4096 Complex32 samples per callback invocation.
 const AIRSPYHF_BLOCK_SIZE: usize = 4096;
@@ -82,9 +83,9 @@ impl SdrHandle {
 
     /// Spawn a per-listener FM demod pipeline. Drop the handle to terminate
     /// the worker thread.
-    pub fn spawn_demod(&self, initial_offset_hz: f32) -> DemodHandle {
+    pub fn spawn_demod(&self, initial_offset_hz: f32, initial_mode: Mode) -> DemodHandle {
         let consumer = self.broker.subscribe(DEMOD_BLOCK_SIZE);
-        fm_pipeline::spawn(consumer, initial_offset_hz)
+        demod_pipeline::spawn(consumer, initial_offset_hz, initial_mode)
     }
 
     fn spawn_spectrum(

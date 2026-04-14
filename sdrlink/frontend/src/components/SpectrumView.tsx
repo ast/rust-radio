@@ -248,6 +248,9 @@ const SpectrumView: Component<Props> = (props) => {
           }
           break;
         }
+        case "DemodChanged":
+          setDemod(msg.payload as DemodState);
+          break;
         case "IceCandidate":
           if (pc) {
             try {
@@ -371,8 +374,16 @@ const SpectrumView: Component<Props> = (props) => {
         </fieldset>
         <fieldset>
           <legend>demod</legend>
-          <select disabled>
-            <option>FM</option>
+          <select
+            value={demod()?.mode ?? "fm"}
+            onChange={(e) => {
+              const mode = e.currentTarget.value;
+              send({ type: "SetDemodMode", payload: { mode } });
+            }}
+          >
+            <option value="fm">FM</option>
+            <option value="usb">USB</option>
+            <option value="lsb">LSB</option>
           </select>
         </fieldset>
         <fieldset>

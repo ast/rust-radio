@@ -15,7 +15,7 @@ use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use crate::app_state::AppState;
 use crate::config::SdrConfig;
 use crate::sdr::Viewport;
-use crate::sdr::fm_pipeline::{FM_FILTER_HIGH_HZ, FM_FILTER_LOW_HZ};
+use crate::sdr::demod::Mode;
 use crate::sdr::spectrum_worker::SpectrumFrame;
 use crate::webrtc_transport;
 
@@ -59,6 +59,10 @@ enum SignalingMessage {
     SetDemodOffset {
         offset_hz: f32,
     },
+    SetDemodMode {
+        mode: Mode,
+    },
+    DemodChanged(DemodState),
 }
 
 pub async fn ws_handler(
@@ -81,12 +85,13 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
 
     // Each WS session owns its own FM demod pipeline. Drop on exit → pipeline
     // thread terminates.
-    let demod = Arc::new(state.sdr.spawn_demod(0.0));
+    let demod = Arc::new(state.sdr.spawn_demod(0.0, Mode::Fm));
+    let (f_lo, f_hi) = demod.filter_hz();
     let demod_state = DemodState {
         offset_hz: demod.offset_hz(),
-        mode: "fm".to_string(),
-        filter_low_hz: FM_FILTER_LOW_HZ,
-        filter_high_hz: FM_FILTER_HIGH_HZ,
+        mode: demod.mode().as_str().to_string(),
+        filter_low_hz: f_lo,
+        filter_high_hz: f_hi,
     };
 
     let hello = SignalingMessage::Hello {
@@ -165,6 +170,19 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                         }
                         Ok(SignalingMessage::SetDemodOffset { offset_hz }) => {
                             demod.set_offset_hz(offset_hz);
+                        }
+                        Ok(SignalingMessage::SetDemodMode { mode }) => {
+                            demod.set_mode(mode);
+                            let (f_lo, f_hi) = crate::sdr::demod::filter_hz_for(mode);
+                            let changed = SignalingMessage::DemodChanged(DemodState {
+                                offset_hz: demod.offset_hz(),
+                                mode: mode.as_str().to_string(),
+                                filter_low_hz: f_lo,
+                                filter_high_hz: f_hi,
+                            });
+                            if !send_json(&mut socket, &changed).await {
+                                break;
+                            }
                         }
                         Ok(SignalingMessage::IceCandidate(c)) => {
                             if let Some(p) = pc.as_ref()

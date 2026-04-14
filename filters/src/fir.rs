@@ -2,6 +2,7 @@ pub mod chain;
 pub mod constant;
 pub mod decimator;
 pub mod dynamic;
+pub mod dynamic_cplx;
 pub mod kernels;
 pub mod naive;
 
