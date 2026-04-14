@@ -33,6 +33,12 @@
         font-size: 0.85rem;
       }
       .topbar button { margin-left: auto; }
+      .waterfall-wrap {
+        flex: 1 1 auto;
+        min-height: 0;
+        position: relative;
+        display: flex;
+      }
       .waterfall {
         flex: 1 1 auto;
         min-height: 0;
@@ -40,6 +46,29 @@
         background: #000;
         image-rendering: pixelated;
         display: block;
+        cursor: crosshair;
+      }
+      .selection-rect {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        background: rgba(143, 221, 221, 0.18);
+        border-left: 1px solid #8fd;
+        border-right: 1px solid #8fd;
+        pointer-events: none;
+      }
+      .viewport-overlay {
+        position: absolute;
+        top: 0.4rem;
+        left: 0.5rem;
+        background: rgba(0, 0, 0, 0.55);
+        border: 1px solid #333;
+        color: #8fd;
+        font-family: ui-monospace, "SF Mono", "Menlo", "Consolas", monospace;
+        font-size: 0.75rem;
+        padding: 0.15rem 0.4rem;
+        pointer-events: none;
+        user-select: none;
       }
       .controls {
         display: flex;

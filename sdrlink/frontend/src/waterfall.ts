@@ -171,6 +171,27 @@ export class Waterfall {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
   }
 
+  /** Clear all history rows (use after a viewport change). */
+  reset() {
+    if (this.pixels === 0) return;
+    const gl = this.gl;
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.specTex);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.R8,
+      this.pixels,
+      HISTORY,
+      0,
+      gl.RED,
+      gl.UNSIGNED_BYTE,
+      new Uint8Array(this.pixels * HISTORY),
+    );
+    this.writeIndex = 0;
+  }
+
   /** Replace the 256×1 RGB colormap texture. */
   setColormap(colormap: Uint8Array) {
     const gl = this.gl;
