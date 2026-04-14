@@ -6,5 +6,23 @@
 .\#*      # .#filename (lock files)
 
 *.bin
-
 *.tar.gz
+
+# Node / frontend build artifacts
+**/node_modules/
+**/dist/
+*.log
+npm-debug.log*
+.pnpm-debug.log*
+.vite/
+.cache/
+
+# Local sdrlink config (checked-in template is sdrlink.example.toml)
+sdrlink.toml
+
+# Editor / OS cruft
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo

@@ -1,0 +1,14 @@
+[server]
+listen_addr = "0.0.0.0:8081"
+
+[sdr]
+center_hz = 100_300_000.0
+samplerate = 768000
+fft_len = 32768
+fft_rate_hz = 20
+
+# Template user — username: sm6wjm, password: sm6wjm
+# Regenerate with: cargo run -p sdrlink -- --config sdrlink.toml user-add <name>
+[[users]]
+username = "sm6wjm"
+password_hash = "$argon2id$v=19$m=19456,t=2,p=1$dZz8UWSCQ88qpkIcrAj9nA$sNSpVc+FvfXdX/mihE4gtptMiEbPa7/R7lQALx6iJHI"

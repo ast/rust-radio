@@ -4,3 +4,59 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+# Web framework
+axum = { version = "0.8", features = ["ws"] }
+axum-extra = { version = "0.10", features = ["typed-header"] }
+tower-http = { version = "0.6", features = ["cors"] }
+
+# WebRTC
+webrtc = "0.17.1"
+webrtc-media = "0.17.1"
+bytes = "1"
+
+# Audio codec
+opus = "0.3"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Serialization / config
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Auth
+argon2 = "0.5"
+rand = "0.9"
+base64 = "0.22"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Static frontend
+rust-embed = { version = "8.11.0", features = ["mime-guess"] }
+
+# Numerics
+num-complex = "0.4"
+
+# Workspace crates
+airspyhf = { path = "../airspyhf" }
+doublemap = { path = "../doublemap" }
+filters = { path = "../filters" }
+pool = { path = "../pool" }
+signals = { path = "../signals" }
+spectrum = { path = "../spectrum" }
+
+[dev-dependencies]
+tempfile = "3"
+tower = "0.5"
+http-body-util = "0.1"

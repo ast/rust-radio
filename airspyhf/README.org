@@ -15,3 +15,19 @@ Safe Rust wrapper around =airspyhf-sys=. Provides a =Device= struct for opening,
   cargo build -p airspyhf
   cargo test -p airspyhf  # hardware-dependent tests are #[ignore]
 #+end_src
+
+** CLI
+
+The =airspyhf= binary exposes the wrapper for quick experiments:
+
+#+begin_src bash
+  airspyhf lib-version
+  airspyhf list
+  airspyhf start --frequency 7.2e6 --samplerate 912000 --duration 5
+  airspyhf start -r capture.iq  # record raw Complex32 IQ to a file
+#+end_src
+
+=start= prints per-block RMS level in dBFS (full scale = unity magnitude),
+so you can confirm a signal is present and not a stream of zeros. An
+all-zero block reports =-inf dBFS=; a typical noise floor with no antenna
+lands around -80 dBFS.

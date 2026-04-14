@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 
 use airspyhf::Device;
 use anyhow::{Context, Result};
+use std::ops::ControlFlow;
 
 pub mod spectrum_server;
 
@@ -60,7 +61,7 @@ fn main() -> Result<()> {
                     spectrum_server.process(samples);
                     // TODO: error handling
 
-                    0 // = continue
+                    ControlFlow::Continue(())
                 })
                 .context("Failed to start device")?;
 

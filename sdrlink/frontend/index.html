@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sdrlink</title>
+    <style>
+      html, body {
+        margin: 0;
+        height: 100%;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #111;
+        color: #ddd;
+        overflow: hidden;
+      }
+      #app {
+        height: 100%;
+      }
+      input, button, select { font-size: 1rem; padding: 0.35rem; }
+
+      .spectrum-view {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+      .topbar {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+        padding: 0.5rem 0.75rem;
+        background: #1a1a1a;
+        border-bottom: 1px solid #333;
+        font-size: 0.85rem;
+      }
+      .topbar button { margin-left: auto; }
+      .waterfall {
+        flex: 1 1 auto;
+        min-height: 0;
+        width: 100%;
+        background: #000;
+        image-rendering: pixelated;
+        display: block;
+      }
+      .controls {
+        display: flex;
+        gap: 0.75rem;
+        padding: 0.5rem 0.75rem;
+        background: #1a1a1a;
+        border-top: 1px solid #333;
+        flex-wrap: wrap;
+      }
+      .controls fieldset {
+        border: 1px solid #333;
+        padding: 0.25rem 0.5rem;
+        margin: 0;
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+      }
+      .controls legend { font-size: 0.75rem; color: #888; padding: 0 0.25rem; }
+      .controls label { display: inline-flex; flex-direction: column; font-size: 0.75rem; color: #888; }
+      .controls input, .controls select {
+        background: #111;
+        color: #ddd;
+        border: 1px solid #333;
+      }
+
+      /* Login screen */
+      form { padding: 2rem; max-width: 20rem; }
+      form input { display: block; width: 100%; margin: 0.25rem 0; box-sizing: border-box; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/index.tsx"></script>
+  </body>
+</html>

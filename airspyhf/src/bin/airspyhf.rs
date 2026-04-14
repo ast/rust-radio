@@ -4,6 +4,7 @@ use airspyhf::Device;
 
 use anyhow::{Context, Result};
 use num_complex::Complex32;
+use std::ops::ControlFlow;
 use std::path::PathBuf;
 
 use std::io::{BufWriter, Write};
@@ -39,6 +40,17 @@ enum Commands {
         #[arg(short, long)]
         record: Option<PathBuf>,
     },
+}
+
+/// RMS power of a Complex32 IQ block in dBFS (full scale = unity magnitude).
+/// Returns -infinity for an all-zero block, which is the expected signal-absent case.
+fn rms_dbfs(samples: &[Complex32]) -> f32 {
+    if samples.is_empty() {
+        return f32::NEG_INFINITY;
+    }
+    let sum_sq: f32 = samples.iter().map(|s| s.norm_sqr()).sum();
+    let mean_power = sum_sq / samples.len() as f32;
+    10.0 * mean_power.log10()
 }
 
 fn main() -> Result<()> {
@@ -120,20 +132,30 @@ fn main() -> Result<()> {
                             .write_all(byte_slice)
                             .expect("Failed to write samples");
 
-                        println!("Wrote {} samples, dropped {}", samples.len(), dropped);
+                        let dbfs = rms_dbfs(samples);
+                        println!(
+                            "Wrote {} samples, dropped {}, level {:.1} dBFS",
+                            samples.len(),
+                            dropped,
+                            dbfs
+                        );
 
-                        // 0 = continue
-                        0
+                        ControlFlow::Continue(())
                     })
                     .context("Failed to start device")?;
             } else {
                 // Start streaming without recording
                 device
                     .start(move |samples, dropped| {
-                        println!("Received {} samples, dropped {}", samples.len(), dropped);
+                        let dbfs = rms_dbfs(samples);
+                        println!(
+                            "Received {} samples, dropped {}, level {:.1} dBFS",
+                            samples.len(),
+                            dropped,
+                            dbfs
+                        );
 
-                        // 0 = continue
-                        0
+                        ControlFlow::Continue(())
                     })
                     .context("Failed to start device")?;
             }

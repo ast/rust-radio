@@ -10,6 +10,7 @@ use num_complex::Complex32;
 
 use std::net::SocketAddr;
 use std::net::UdpSocket;
+use std::ops::ControlFlow;
 
 use procfs::process::Process;
 use std::time::{Duration, Instant};
@@ -102,7 +103,7 @@ fn main() -> Result<()> {
                         }
                     }
 
-                    0 // = continue
+                    ControlFlow::Continue(())
                 })
                 .context("Failed to start device")?;
 

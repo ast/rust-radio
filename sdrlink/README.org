@@ -1,0 +1,134 @@
+* sdrlink
+
+OpenWebRX-style web SDR with a Rust backend and a SolidJS frontend. An
+AirspyHF+ (or, for now, a fake oscillator source) is fanned out to a
+shared FFT spectrum worker; clients authenticate over HTTP and receive
+binary spectrum frames over a WebSocket. WebRTC audio + per-client FM
+demod are planned follow-ups.
+
+** Status (v0)
+
+- [X] TOML config + argon2 user management (=user-add= / =user-remove= / =user-list=)
+- [X] =IqBroker= fan-out designed for N consumers
+- [X] Shared 32k FFT spectrum worker, quantized u8 PDS broadcast
+- [X] AirspyHF+ hardware source (fake oscillator kept for tests)
+- [X] =/api/login= + =/api/validate= + =/api/ws= (spectrum stream)
+- [X] Embedded SolidJS frontend (login + scrolling waterfall)
+- [ ] WebRTC audio (Opus) + =spectrum= data channel (replaces WS for frames)
+- [ ] Per-client viewport min/max decimation
+- [ ] FM demod pipeline
+
+** Build
+
+System deps:
+
+#+begin_src bash
+  # Debian/Ubuntu
+  sudo apt install libasound2-dev cmake nodejs npm
+#+end_src
+
+Build the frontend first so =rust-embed= picks up =frontend/dist=:
+
+#+begin_src bash
+  cd frontend && npm install && npm run build && cd ..
+  cargo build -p sdrlink
+#+end_src
+
+Run the test suite:
+
+#+begin_src bash
+  cargo test -p sdrlink
+#+end_src
+
+** Run
+
+Start the server against the checked-in example config:
+
+#+begin_src bash
+  just run
+  # equivalent to:
+  # RUST_LOG=sdrlink=info cargo run -p sdrlink -- --config sdrlink.example.toml serve
+#+end_src
+
+For a persistent local config, copy the example first:
+
+#+begin_src bash
+  cp sdrlink.example.toml sdrlink.toml
+  cargo run -p sdrlink -- serve
+#+end_src
+
+Requires an AirspyHF+ plugged into USB. Open =http://localhost:8081/=
+and log in with:
+
+- username: =sm6wjm=
+- password: =sm6wjm=
+
+You should see a scrolling grayscale waterfall of the tuned passband
+(default: 100.3 MHz, 768 kHz wide).
+
+*** Frontend dev server
+
+Vite dev with HMR, proxied to the backend on 8081:
+
+#+begin_src bash
+  just frontend-dev
+  # open http://localhost:5173
+#+end_src
+
+** User management
+
+#+begin_src bash
+  cargo run -p sdrlink -- user-add <username>      # prompts for password
+  cargo run -p sdrlink -- user-remove <username>
+  cargo run -p sdrlink -- user-list
+#+end_src
+
+All three take an optional =--config <path>= (default =sdrlink.toml=).
+
+** Config (=sdrlink.toml=)
+
+#+begin_src toml
+  [server]
+  listen_addr = "0.0.0.0:8081"
+
+  [sdr]
+  center_hz = 100_300_000.0   # FM broadcast example
+  samplerate = 768000         # AirspyHF native; clean decimation to 48 kHz audio
+  fft_len = 32768             # 23.4 Hz/bin at 768 kHz
+  fft_rate_hz = 20            # frames per second
+
+  [[users]]
+  username = "sm6wjm"
+  password_hash = "$argon2id$..."
+#+end_src
+
+Defaults (=samplerate=, =fft_len=, =fft_rate_hz=) kick in if omitted.
+
+** Architecture
+
+#+begin_src text
+  airspyhf ── IqBroker ──┬──► spectrum_worker ── broadcast<Arc<[u8]>> ──► WS clients
+  (Device      fan-out   │        (shared 32k FFT, quantize to u8 dB)
+   callback)             │
+                         └──► (future) per-client demod pipelines
+#+end_src
+
+Building blocks come from sibling workspace crates: =airspyhf=,
+=doublemap= (SPSC memfd ring), =pool= (RAII =BufferPool=), =spectrum=
+(=Analyzer=), =filters=, =signals= (fake oscillator).
+
+** Wire protocol (v0)
+
+=/api/ws?token=...= — first message is JSON =Hello=:
+
+#+begin_src json
+  { "type": "Hello", "center_hz": 100300000.0, "samplerate": 768000,
+    "fft_len": 32768, "fft_rate_hz": 20 }
+#+end_src
+
+Subsequent binary messages are =fft_len= bytes of u8 PDS (dBFS
+quantized over [-140, -20] to 0..255).
+
+** License
+
+Same as workspace root.

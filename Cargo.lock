@@ -3200,6 +3200,39 @@ dependencies = [
 [[package]]
 name = "sdrlink"
 version = "0.1.0"
+dependencies = [
+ "airspyhf",
+ "anyhow",
+ "argon2",
+ "axum",
+ "axum-extra",
+ "base64",
+ "bytes",
+ "clap",
+ "doublemap",
+ "filters",
+ "http-body-util",
+ "num-complex",
+ "opus",
+ "pool",
+ "rand",
+ "rust-embed",
+ "serde",
+ "serde_json",
+ "signals",
+ "spectrum",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-stream",
+ "toml",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "webrtc",
+ "webrtc-media",
+]
 
 [[package]]
 name = "sec1"
