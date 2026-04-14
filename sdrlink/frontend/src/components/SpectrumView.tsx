@@ -1,5 +1,11 @@
 import { Component, createSignal, onCleanup, onMount } from "solid-js";
-import { buildColormap } from "../colormap";
+import {
+  COLORMAP_NAMES,
+  ColormapName,
+  DEFAULT_COLORMAP,
+  colormap,
+} from "../colormap";
+import { Waterfall } from "../waterfall";
 
 interface Props {
   token: string;
@@ -14,14 +20,14 @@ interface Hello {
   fft_rate_hz: number;
 }
 
-const COLORMAP = buildColormap();
-
 const SpectrumView: Component<Props> = (props) => {
   const [hello, setHello] = createSignal<Hello | null>(null);
   const [frames, setFrames] = createSignal(0);
   const [status, setStatus] = createSignal("connecting…");
+  const [cmap, setCmap] = createSignal<ColormapName>(DEFAULT_COLORMAP);
   let canvas: HTMLCanvasElement | undefined;
   let ws: WebSocket | undefined;
+  let waterfall: Waterfall | undefined;
 
   const sendViewport = (h: Hello) => {
     if (!ws || !canvas || ws.readyState !== WebSocket.OPEN) return;
@@ -41,6 +47,8 @@ const SpectrumView: Component<Props> = (props) => {
   };
 
   onMount(() => {
+    if (canvas) waterfall = new Waterfall(canvas, colormap(cmap()));
+
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     const url = `${proto}//${location.host}/api/ws?token=${encodeURIComponent(props.token)}`;
     ws = new WebSocket(url);
@@ -65,29 +73,12 @@ const SpectrumView: Component<Props> = (props) => {
     };
 
     const drawFrame = (view: DataView) => {
-      if (!canvas) return;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-
+      if (!waterfall) return;
       const pixels = view.getUint16(0, true);
       if (pixels === 0) return;
+      // Layout: [u16 pixels][u8 min[pixels]][u8 max[pixels]]
       const max = new Uint8Array(view.buffer, 2 + pixels, pixels);
-
-      if (canvas.width !== pixels) canvas.width = pixels;
-      const { width, height } = canvas;
-
-      const img = ctx.getImageData(0, 0, width, height);
-      img.data.copyWithin(0, width * 4, width * height * 4);
-      const off = (height - 1) * width * 4;
-      for (let i = 0; i < pixels; i++) {
-        const c = max[i] * 3;
-        const j = off + i * 4;
-        img.data[j] = COLORMAP[c];
-        img.data[j + 1] = COLORMAP[c + 1];
-        img.data[j + 2] = COLORMAP[c + 2];
-        img.data[j + 3] = 255;
-      }
-      ctx.putImageData(img, 0, 0);
+      waterfall.pushRow(max);
     };
 
     // Re-send viewport on resize so server decimates to match new canvas width.
@@ -147,8 +138,17 @@ const SpectrumView: Component<Props> = (props) => {
           <legend>display</legend>
           <label>
             colormap
-            <select disabled>
-              <option>websdr</option>
+            <select
+              value={cmap()}
+              onChange={(e) => {
+                const name = e.currentTarget.value as ColormapName;
+                setCmap(name);
+                waterfall?.setColormap(colormap(name));
+              }}
+            >
+              {COLORMAP_NAMES.map((n) => (
+                <option value={n}>{n}</option>
+              ))}
             </select>
           </label>
         </fieldset>

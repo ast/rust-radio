@@ -1,6 +1,9 @@
 run:
     RUST_LOG=sdrlink=info cargo run -p sdrlink -- --config sdrlink.example.toml serve
 
+run-release:
+    RUST_LOG=sdrlink=info cargo run --release -p sdrlink -- --config sdrlink.example.toml serve
+
 frontend-dev:
     cd frontend && npm run dev
 
