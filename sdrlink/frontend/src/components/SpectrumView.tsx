@@ -13,11 +13,19 @@ interface Props {
   onLogout: () => void;
 }
 
+interface DemodState {
+  offset_hz: number;
+  mode: string;
+  filter_low_hz: number;
+  filter_high_hz: number;
+}
+
 interface Hello {
   center_hz: number;
   samplerate: number;
   fft_len: number;
   fft_rate_hz: number;
+  demod: DemodState;
 }
 
 interface Viewport {
@@ -47,6 +55,7 @@ const SpectrumView: Component<Props> = (props) => {
   const [audioStatus, setAudioStatus] = createSignal("idle");
   const [cmap, setCmap] = createSignal<ColormapName>(DEFAULT_COLORMAP);
   const [selection, setSelection] = createSignal<{ x0: number; x1: number } | null>(null);
+  const [demod, setDemod] = createSignal<DemodState | null>(null);
   let canvas: HTMLCanvasElement | undefined;
   let audioEl: HTMLAudioElement | undefined;
   let ws: WebSocket | undefined;
@@ -119,8 +128,16 @@ const SpectrumView: Component<Props> = (props) => {
     const x = Math.max(0, Math.min(origin.rectWidth, e.clientX - origin.rectLeft));
     const xMin = Math.min(sel.x0, x);
     const xMax = Math.max(sel.x0, x);
-    // Treat tiny drags as a click — no zoom.
-    if (xMax - xMin < 4) return;
+    // Treat tiny drags as a click — tune the demod instead of zooming.
+    if (xMax - xMin < 4) {
+      const span = vp.stopHz - vp.startHz;
+      const clickHz = vp.startHz + ((xMin + xMax) / 2 / origin.rectWidth) * span;
+      const offset = clickHz - h.center_hz;
+      const d = demod();
+      if (d) setDemod({ ...d, offset_hz: offset });
+      send({ type: "SetDemodOffset", payload: { offset_hz: offset } });
+      return;
+    }
     const span = vp.stopHz - vp.startHz;
     applyViewport(
       {
@@ -209,6 +226,7 @@ const SpectrumView: Component<Props> = (props) => {
         case "Hello": {
           const h = msg.payload as Hello;
           setHello(h);
+          setDemod(h.demod);
           const vp = fullViewport(h);
           setViewport(vp);
           sendViewport(vp, h);
@@ -301,6 +319,36 @@ const SpectrumView: Component<Props> = (props) => {
             {(viewport()!.stopHz / 1e6).toFixed(3)} MHz · span{" "}
             {((viewport()!.stopHz - viewport()!.startHz) / 1e3).toFixed(1)} kHz
             {history.length > 0 && ` · ${history.length} back`}
+          </div>
+        )}
+        {(() => {
+          const h = hello();
+          const vp = viewport();
+          const d = demod();
+          if (!h || !vp || !d) return null;
+          const span = vp.stopHz - vp.startHz;
+          const demodHz = h.center_hz + d.offset_hz;
+          const loHz = demodHz + d.filter_low_hz;
+          const hiHz = demodHz + d.filter_high_hz;
+          if (hiHz < vp.startHz || loHz > vp.stopHz) return null;
+          const leftPct = ((loHz - vp.startHz) / span) * 100;
+          const widthPct = ((hiHz - loHz) / span) * 100;
+          const centerPct = ((demodHz - vp.startHz) / span) * 100;
+          return (
+            <>
+              <div
+                class="filter-band"
+                style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+              />
+              <div class="filter-center" style={{ left: `${centerPct}%` }} />
+            </>
+          );
+        })()}
+        {demod() && hello() && (
+          <div class="demod-strip">
+            demod {((hello()!.center_hz + demod()!.offset_hz) / 1e6).toFixed(3)} MHz ·{" "}
+            {demod()!.mode.toUpperCase()} {(demod()!.filter_low_hz / 1e3).toFixed(1)}…
+            {(demod()!.filter_high_hz / 1e3).toFixed(1)} kHz
           </div>
         )}
       </div>

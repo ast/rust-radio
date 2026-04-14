@@ -40,6 +40,13 @@ impl ComplexRotator {
         self.phase = Complex32::new(1.0, 0.0);
         self.counter = 0;
     }
+
+    /// Change the shift frequency without disturbing the running phase, so
+    /// retuning a live stream is click-free.
+    pub fn set_freq(&mut self, freq_shift_hz: f32, sample_rate: f32) {
+        let omega = 2.0 * PI * freq_shift_hz / sample_rate;
+        self.step = Complex32::from_polar(1.0, omega);
+    }
 }
 
 #[cfg(test)]

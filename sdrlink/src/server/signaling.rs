@@ -15,12 +15,21 @@ use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use crate::app_state::AppState;
 use crate::config::SdrConfig;
 use crate::sdr::Viewport;
+use crate::sdr::fm_pipeline::{FM_FILTER_HIGH_HZ, FM_FILTER_LOW_HZ};
 use crate::sdr::spectrum_worker::SpectrumFrame;
 use crate::webrtc_transport;
 
 #[derive(Deserialize)]
 pub struct WsParams {
     pub token: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct DemodState {
+    offset_hz: f32,
+    mode: String,
+    filter_low_hz: f32,
+    filter_high_hz: f32,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -31,6 +40,7 @@ enum SignalingMessage {
         samplerate: u32,
         fft_len: u32,
         fft_rate_hz: u32,
+        demod: DemodState,
     },
     SetViewport {
         start_hz: f64,
@@ -45,6 +55,9 @@ enum SignalingMessage {
     },
     CenterChanged {
         hz: f64,
+    },
+    SetDemodOffset {
+        offset_hz: f32,
     },
 }
 
@@ -66,11 +79,22 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
     let cfg = state.sdr.config().clone();
     let mut current_center = state.sdr.center_hz();
 
+    // Each WS session owns its own FM demod pipeline. Drop on exit → pipeline
+    // thread terminates.
+    let demod = Arc::new(state.sdr.spawn_demod(0.0));
+    let demod_state = DemodState {
+        offset_hz: demod.offset_hz(),
+        mode: "fm".to_string(),
+        filter_low_hz: FM_FILTER_LOW_HZ,
+        filter_high_hz: FM_FILTER_HIGH_HZ,
+    };
+
     let hello = SignalingMessage::Hello {
         center_hz: current_center,
         samplerate: cfg.samplerate,
         fft_len: cfg.fft_len,
         fft_rate_hz: cfg.fft_rate_hz,
+        demod: demod_state,
     };
     if !send_json(&mut socket, &hello).await {
         return;
@@ -127,6 +151,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                                 offer,
                                 ice_tx.clone(),
                                 viewport_rx.clone(),
+                                demod.subscribe_audio(),
                             ).await {
                                 Ok((new_pc, answer)) => {
                                     pc = Some(new_pc);
@@ -137,6 +162,9 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                                 }
                                 Err(e) => tracing::error!("offer handling failed: {e}"),
                             }
+                        }
+                        Ok(SignalingMessage::SetDemodOffset { offset_hz }) => {
+                            demod.set_offset_hz(offset_hz);
                         }
                         Ok(SignalingMessage::IceCandidate(c)) => {
                             if let Some(p) = pc.as_ref()
@@ -170,8 +198,8 @@ async fn handle_offer(
     offer: RTCSessionDescription,
     ice_tx: mpsc::Sender<RTCIceCandidateInit>,
     viewport_rx: watch::Receiver<Option<Viewport>>,
+    audio_rx: tokio::sync::broadcast::Receiver<crate::sdr::AudioFrame>,
 ) -> Result<(Arc<RTCPeerConnection>, RTCSessionDescription), String> {
-    let audio_rx = state.sdr.subscribe_audio();
     let pc = webrtc_transport::create_peer_connection(audio_rx)
         .await
         .map_err(|e| format!("create pc: {e}"))?;

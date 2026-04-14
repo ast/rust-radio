@@ -57,6 +57,36 @@
         border-right: 1px solid #8fd;
         pointer-events: none;
       }
+      .filter-band {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        background: rgba(255, 200, 80, 0.10);
+        border-left: 1px solid rgba(255, 200, 80, 0.5);
+        border-right: 1px solid rgba(255, 200, 80, 0.5);
+        pointer-events: none;
+      }
+      .filter-center {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 0;
+        border-left: 1px dashed rgba(255, 200, 80, 0.9);
+        pointer-events: none;
+      }
+      .demod-strip {
+        position: absolute;
+        left: 0.5rem;
+        bottom: 0.4rem;
+        background: rgba(0, 0, 0, 0.55);
+        border: 1px solid #333;
+        color: #fc8;
+        font-family: ui-monospace, "SF Mono", "Menlo", "Consolas", monospace;
+        font-size: 0.75rem;
+        padding: 0.15rem 0.4rem;
+        pointer-events: none;
+        user-select: none;
+      }
       .viewport-overlay {
         position: absolute;
         top: 0.4rem;
