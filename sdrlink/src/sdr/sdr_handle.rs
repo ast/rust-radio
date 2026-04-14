@@ -1,12 +1,12 @@
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock};
 use std::thread::JoinHandle;
 
 use airspyhf::Device;
 use tokio::sync::broadcast;
 
 use crate::config::SdrConfig;
-use crate::error::Result;
+use crate::error::{Result, SdrLinkError};
 
 use super::fm_pipeline::AudioFrame;
 use super::spectrum_worker::SpectrumFrame;
@@ -20,6 +20,8 @@ pub struct SdrHandle {
     broker: Arc<IqBroker>,
     spectrum_tx: broadcast::Sender<SpectrumFrame>,
     audio_tx: broadcast::Sender<AudioFrame>,
+    center_tx: broadcast::Sender<f64>,
+    center_hz: RwLock<f64>,
     source: IqSource,
     config: SdrConfig,
 }
@@ -42,11 +44,14 @@ impl SdrHandle {
         let audio_tx = Self::spawn_fm(&broker);
 
         let device = airspyhf_source::start(broker.clone(), config.center_hz, config.samplerate)?;
+        let (center_tx, _) = broadcast::channel::<f64>(8);
 
         Ok(Self {
             broker,
             spectrum_tx,
             audio_tx,
+            center_tx,
+            center_hz: RwLock::new(config.center_hz),
             source: IqSource::Airspyhf(Some(device)),
             config,
         })
@@ -61,11 +66,14 @@ impl SdrHandle {
 
         let stop = Arc::new(AtomicBool::new(false));
         let thread = fake_source::spawn(broker.clone(), config.samplerate, tone_hz, stop.clone());
+        let (center_tx, _) = broadcast::channel::<f64>(8);
 
         Self {
             broker,
             spectrum_tx,
             audio_tx,
+            center_tx,
+            center_hz: RwLock::new(config.center_hz),
             source: IqSource::Fake {
                 stop,
                 thread: Some(thread),
@@ -109,6 +117,35 @@ impl SdrHandle {
 
     pub fn broker(&self) -> &Arc<IqBroker> {
         &self.broker
+    }
+
+    pub fn center_hz(&self) -> f64 {
+        *self.center_hz.read().unwrap()
+    }
+
+    pub fn subscribe_center(&self) -> broadcast::Receiver<f64> {
+        self.center_tx.subscribe()
+    }
+
+    /// Retune the radio. Broadcasts the new center to all WS clients.
+    pub fn set_center_hz(&self, hz: f64) -> Result<()> {
+        match &self.source {
+            IqSource::Airspyhf(Some(device)) => {
+                device.set_frequency(hz).map_err(|e| {
+                    SdrLinkError::Sdr(format!("set_frequency({hz}) failed: {e}"))
+                })?;
+            }
+            IqSource::Airspyhf(None) => {
+                return Err(SdrLinkError::Sdr("device already dropped".into()));
+            }
+            IqSource::Fake { .. } => {
+                // Fake source has no real tuner — accept the value so the UI
+                // still works in dev mode.
+            }
+        }
+        *self.center_hz.write().unwrap() = hz;
+        let _ = self.center_tx.send(hz);
+        Ok(())
     }
 }
 

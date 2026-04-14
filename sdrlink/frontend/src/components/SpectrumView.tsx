@@ -6,6 +6,7 @@ import {
   colormap,
 } from "../colormap";
 import { Waterfall } from "../waterfall";
+import FrequencyTuner from "./FrequencyTuner";
 
 interface Props {
   token: string;
@@ -105,6 +106,15 @@ const SpectrumView: Component<Props> = (props) => {
           case "Answer":
             if (pc) await pc.setRemoteDescription(msg.payload);
             break;
+          case "CenterChanged": {
+            const h = hello();
+            if (h) {
+              const updated = { ...h, center_hz: msg.payload.hz };
+              setHello(updated);
+              sendViewport(updated);
+            }
+            break;
+          }
           case "IceCandidate":
             if (pc) {
               try {
@@ -165,15 +175,16 @@ const SpectrumView: Component<Props> = (props) => {
       <div class="controls">
         <fieldset>
           <legend>tuning</legend>
-          <label>
-            center (MHz)
-            <input
-              type="number"
-              step="0.001"
-              disabled
-              value={hello() ? (hello()!.center_hz / 1e6).toFixed(3) : ""}
+          {hello() && (
+            <FrequencyTuner
+              hz={hello()!.center_hz}
+              onTune={(hz) => {
+                // Optimistic local update; server echoes CenterChanged.
+                setHello({ ...hello()!, center_hz: hz });
+                send({ type: "SetCenter", payload: { hz } });
+              }}
             />
-          </label>
+          )}
         </fieldset>
         <fieldset>
           <legend>demod</legend>

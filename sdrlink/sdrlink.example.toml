@@ -2,7 +2,14 @@
 listen_addr = "0.0.0.0:8081"
 
 [sdr]
-center_hz = 100_300_000.0
+# Göteborg FM stations — uncomment one:
+# center_hz = 102_700_000.0   # P4 Göteborg
+# center_hz =  92_400_000.0  # P1
+# center_hz =  89_300_000.0  # P2
+# center_hz =  99_300_000.0  # P3
+# center_hz = 104_700_000.0  # Mix Megapol
+# center_hz = 105_100_000.0  # NRJ
+center_hz = 107_300_000.0  # Rix FM
 samplerate = 768000
 fft_len = 32768
 fft_rate_hz = 20

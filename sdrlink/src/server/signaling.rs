@@ -37,6 +37,12 @@ enum SignalingMessage {
     Offer(RTCSessionDescription),
     Answer(RTCSessionDescription),
     IceCandidate(RTCIceCandidateInit),
+    SetCenter {
+        hz: f64,
+    },
+    CenterChanged {
+        hz: f64,
+    },
 }
 
 pub async fn ws_handler(
@@ -55,9 +61,10 @@ pub async fn ws_handler(
 
 async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
     let cfg = state.sdr.config().clone();
+    let mut current_center = state.sdr.center_hz();
 
     let hello = SignalingMessage::Hello {
-        center_hz: cfg.center_hz,
+        center_hz: current_center,
         samplerate: cfg.samplerate,
         fft_len: cfg.fft_len,
         fft_rate_hz: cfg.fft_rate_hz,
@@ -67,6 +74,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
     }
 
     let mut rx = state.sdr.subscribe_spectrum();
+    let mut center_rx = state.sdr.subscribe_center();
 
     let mut viewport: Option<Viewport> = None;
     let mut min_buf: Vec<u8> = Vec::new();
@@ -98,17 +106,33 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                     break;
                 }
             },
+            res = center_rx.recv() => match res {
+                Ok(hz) => {
+                    current_center = hz;
+                    let msg = SignalingMessage::CenterChanged { hz };
+                    if !send_json(&mut socket, &msg).await {
+                        break;
+                    }
+                }
+                Err(RecvError::Lagged(_)) => {}
+                Err(RecvError::Closed) => break,
+            },
             msg = socket.recv() => match msg {
                 Some(Ok(Message::Text(text))) => {
                     match serde_json::from_str::<SignalingMessage>(&text) {
                         Ok(SignalingMessage::SetViewport { start_hz, stop_hz, pixels }) => {
-                            viewport = build_viewport(&cfg, start_hz, stop_hz, pixels);
+                            viewport = build_viewport(&cfg, current_center, start_hz, stop_hz, pixels);
                             if let Some(vp) = viewport {
                                 min_buf.resize(vp.pixels as usize, 0);
                                 max_buf.resize(vp.pixels as usize, 0);
                                 tracing::debug!(?vp, "viewport set");
                             } else {
                                 tracing::warn!("invalid viewport: {start_hz}..{stop_hz} px={pixels}");
+                            }
+                        }
+                        Ok(SignalingMessage::SetCenter { hz }) => {
+                            if let Err(e) = state.sdr.set_center_hz(hz) {
+                                tracing::error!("set_center_hz failed: {e}");
                             }
                         }
                         Ok(SignalingMessage::Offer(offer)) => {
@@ -199,12 +223,18 @@ async fn send_json(socket: &mut WebSocket, msg: &SignalingMessage) -> bool {
     }
 }
 
-fn build_viewport(cfg: &SdrConfig, start_hz: f64, stop_hz: f64, pixels: u16) -> Option<Viewport> {
+fn build_viewport(
+    cfg: &SdrConfig,
+    center_hz: f64,
+    start_hz: f64,
+    stop_hz: f64,
+    pixels: u16,
+) -> Option<Viewport> {
     Viewport::from_hz(
         start_hz,
         stop_hz,
         pixels,
-        cfg.center_hz,
+        center_hz,
         cfg.samplerate,
         cfg.fft_len as usize,
     )
