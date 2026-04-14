@@ -5,39 +5,38 @@ use axum::extract::{Query, State};
 use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast::error::RecvError;
+use tokio::sync::mpsc;
+use webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
+use webrtc::peer_connection::RTCPeerConnection;
+use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 
 use crate::app_state::AppState;
 use crate::config::SdrConfig;
 use crate::sdr::Viewport;
+use crate::webrtc_transport;
 
-/// Pre-WebRTC transport for spectrum frames. Once the WebRTC `spectrum` data
-/// channel lands (plan step 6) this becomes signaling-only.
 #[derive(Deserialize)]
 pub struct WsParams {
     pub token: String,
 }
 
-#[derive(Serialize)]
-#[serde(tag = "type")]
-#[allow(clippy::enum_variant_names)]
-enum ServerMessage {
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "type", content = "payload")]
+enum SignalingMessage {
     Hello {
         center_hz: f64,
         samplerate: u32,
         fft_len: u32,
         fft_rate_hz: u32,
     },
-}
-
-#[derive(Deserialize)]
-#[serde(tag = "type")]
-enum ClientMessage {
-    /// Set this client's spectrum viewport. Server clamps to passband.
     SetViewport {
         start_hz: f64,
         stop_hz: f64,
         pixels: u16,
     },
+    Offer(RTCSessionDescription),
+    Answer(RTCSessionDescription),
+    IceCandidate(RTCIceCandidateInit),
 }
 
 pub async fn ws_handler(
@@ -57,33 +56,25 @@ pub async fn ws_handler(
 async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
     let cfg = state.sdr.config().clone();
 
-    let hello = ServerMessage::Hello {
+    let hello = SignalingMessage::Hello {
         center_hz: cfg.center_hz,
         samplerate: cfg.samplerate,
         fft_len: cfg.fft_len,
         fft_rate_hz: cfg.fft_rate_hz,
     };
-
-    let hello_json = match serde_json::to_string(&hello) {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::error!("failed to serialize hello: {e}");
-            return;
-        }
-    };
-
-    if socket.send(Message::Text(hello_json.into())).await.is_err() {
+    if !send_json(&mut socket, &hello).await {
         return;
     }
 
     let mut rx = state.sdr.subscribe_spectrum();
 
-    // Per-client state: viewport + reusable decimation buffers so we don't
-    // allocate on the hot path.
     let mut viewport: Option<Viewport> = None;
     let mut min_buf: Vec<u8> = Vec::new();
     let mut max_buf: Vec<u8> = Vec::new();
     let mut wire_buf: Vec<u8> = Vec::new();
+
+    let mut pc: Option<Arc<RTCPeerConnection>> = None;
+    let (ice_tx, mut ice_rx) = mpsc::channel::<RTCIceCandidateInit>(32);
 
     loop {
         tokio::select! {
@@ -95,30 +86,51 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                         break;
                     }
                 }
-                Err(RecvError::Lagged(n)) => {
-                    tracing::warn!("ws receiver lagged {n} frames, continuing");
-                }
+                Err(RecvError::Lagged(n)) => tracing::warn!("ws lagged {n} frames"),
                 Err(RecvError::Closed) => {
                     tracing::info!("spectrum channel closed");
                     break;
                 }
             },
+            Some(cand) = ice_rx.recv() => {
+                let msg = SignalingMessage::IceCandidate(cand);
+                if !send_json(&mut socket, &msg).await {
+                    break;
+                }
+            },
             msg = socket.recv() => match msg {
                 Some(Ok(Message::Text(text))) => {
-                    match serde_json::from_str::<ClientMessage>(&text) {
-                        Ok(ClientMessage::SetViewport { start_hz, stop_hz, pixels }) => {
+                    match serde_json::from_str::<SignalingMessage>(&text) {
+                        Ok(SignalingMessage::SetViewport { start_hz, stop_hz, pixels }) => {
                             viewport = build_viewport(&cfg, start_hz, stop_hz, pixels);
                             if let Some(vp) = viewport {
                                 min_buf.resize(vp.pixels as usize, 0);
                                 max_buf.resize(vp.pixels as usize, 0);
-                                tracing::debug!(
-                                    ?vp, start_hz, stop_hz, pixels,
-                                    "viewport set"
-                                );
+                                tracing::debug!(?vp, "viewport set");
                             } else {
                                 tracing::warn!("invalid viewport: {start_hz}..{stop_hz} px={pixels}");
                             }
                         }
+                        Ok(SignalingMessage::Offer(offer)) => {
+                            match handle_offer(state.clone(), offer, ice_tx.clone()).await {
+                                Ok((new_pc, answer)) => {
+                                    pc = Some(new_pc);
+                                    let msg = SignalingMessage::Answer(answer);
+                                    if !send_json(&mut socket, &msg).await {
+                                        break;
+                                    }
+                                }
+                                Err(e) => tracing::error!("offer handling failed: {e}"),
+                            }
+                        }
+                        Ok(SignalingMessage::IceCandidate(c)) => {
+                            if let Some(p) = pc.as_ref()
+                                && let Err(e) = p.add_ice_candidate(c).await
+                            {
+                                tracing::error!("add ice candidate: {e}");
+                            }
+                        }
+                        Ok(_) => {}
                         Err(e) => tracing::warn!("bad client message: {e}"),
                     }
                 }
@@ -132,7 +144,59 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
         }
     }
 
+    if let Some(p) = pc {
+        let _ = p.close().await;
+    }
     tracing::info!("ws disconnected");
+}
+
+async fn handle_offer(
+    state: Arc<AppState>,
+    offer: RTCSessionDescription,
+    ice_tx: mpsc::Sender<RTCIceCandidateInit>,
+) -> Result<(Arc<RTCPeerConnection>, RTCSessionDescription), String> {
+    let audio_rx = state.sdr.subscribe_audio();
+    let pc = webrtc_transport::create_peer_connection(audio_rx)
+        .await
+        .map_err(|e| format!("create pc: {e}"))?;
+
+    pc.on_ice_candidate(Box::new(move |candidate| {
+        let tx = ice_tx.clone();
+        Box::pin(async move {
+            let Some(c) = candidate else { return };
+            if let Ok(init) = c.to_json() {
+                let _ = tx.send(init).await;
+            }
+        })
+    }));
+
+    pc.on_peer_connection_state_change(Box::new(move |s| {
+        tracing::info!("peer connection state: {s}");
+        Box::pin(async {})
+    }));
+
+    pc.set_remote_description(offer)
+        .await
+        .map_err(|e| format!("set remote: {e}"))?;
+    let answer = pc
+        .create_answer(None)
+        .await
+        .map_err(|e| format!("create answer: {e}"))?;
+    pc.set_local_description(answer.clone())
+        .await
+        .map_err(|e| format!("set local: {e}"))?;
+
+    Ok((pc, answer))
+}
+
+async fn send_json(socket: &mut WebSocket, msg: &SignalingMessage) -> bool {
+    match serde_json::to_string(msg) {
+        Ok(s) => socket.send(Message::Text(s.into())).await.is_ok(),
+        Err(e) => {
+            tracing::error!("serialize signaling: {e}");
+            false
+        }
+    }
 }
 
 fn build_viewport(cfg: &SdrConfig, start_hz: f64, stop_hz: f64, pixels: u16) -> Option<Viewport> {

@@ -1,7 +1,10 @@
 pub mod fir;
+pub mod fm_demod;
 pub mod ringbuffer;
 pub mod rotate;
 pub mod traits;
+
+pub use fm_demod::FmDemod;
 
 // Trait re-exports
 pub use traits::{Decimator, DelayLine, Filter};

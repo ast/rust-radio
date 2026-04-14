@@ -13,7 +13,6 @@ interface Props {
 }
 
 interface Hello {
-  type: "Hello";
   center_hz: number;
   samplerate: number;
   fft_len: number;
@@ -24,26 +23,60 @@ const SpectrumView: Component<Props> = (props) => {
   const [hello, setHello] = createSignal<Hello | null>(null);
   const [frames, setFrames] = createSignal(0);
   const [status, setStatus] = createSignal("connecting…");
+  const [audioStatus, setAudioStatus] = createSignal("idle");
   const [cmap, setCmap] = createSignal<ColormapName>(DEFAULT_COLORMAP);
   let canvas: HTMLCanvasElement | undefined;
+  let audioEl: HTMLAudioElement | undefined;
   let ws: WebSocket | undefined;
   let waterfall: Waterfall | undefined;
+  let pc: RTCPeerConnection | undefined;
+
+  const send = (msg: unknown) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify(msg));
+  };
 
   const sendViewport = (h: Hello) => {
-    if (!ws || !canvas || ws.readyState !== WebSocket.OPEN) return;
-    const pixels = Math.max(
-      64,
-      Math.min(canvas.clientWidth || 1024, h.fft_len),
-    );
+    if (!canvas) return;
+    const pixels = Math.max(64, Math.min(canvas.clientWidth || 1024, h.fft_len));
     const halfBand = h.samplerate / 2;
-    ws.send(
-      JSON.stringify({
-        type: "SetViewport",
+    send({
+      type: "SetViewport",
+      payload: {
         start_hz: h.center_hz - halfBand,
         stop_hz: h.center_hz + halfBand,
         pixels,
-      }),
-    );
+      },
+    });
+  };
+
+  const startWebrtc = async () => {
+    setAudioStatus("negotiating");
+    pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    });
+
+    pc.ontrack = (e) => {
+      if (audioEl && e.streams[0]) {
+        audioEl.srcObject = e.streams[0];
+        audioEl.play().catch((err) => {
+          setAudioStatus(`autoplay blocked: click ▶ (${err.message})`);
+        });
+      }
+    };
+    pc.onconnectionstatechange = () => {
+      if (pc) setAudioStatus(pc.connectionState);
+    };
+    pc.onicecandidate = (e) => {
+      if (e.candidate) {
+        send({ type: "IceCandidate", payload: e.candidate.toJSON() });
+      }
+    };
+
+    pc.addTransceiver("audio", { direction: "recvonly" });
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    send({ type: "Offer", payload: offer });
   };
 
   onMount(() => {
@@ -58,13 +91,29 @@ const SpectrumView: Component<Props> = (props) => {
     ws.onclose = () => setStatus("disconnected");
     ws.onerror = () => setStatus("error");
 
-    ws.onmessage = (e) => {
+    ws.onmessage = async (e) => {
       if (typeof e.data === "string") {
         const msg = JSON.parse(e.data);
-        if (msg.type === "Hello") {
-          const h = msg as Hello;
-          setHello(h);
-          sendViewport(h);
+        switch (msg.type) {
+          case "Hello": {
+            const h = msg.payload as Hello;
+            setHello(h);
+            sendViewport(h);
+            await startWebrtc();
+            break;
+          }
+          case "Answer":
+            if (pc) await pc.setRemoteDescription(msg.payload);
+            break;
+          case "IceCandidate":
+            if (pc) {
+              try {
+                await pc.addIceCandidate(msg.payload);
+              } catch (err) {
+                console.warn("addIceCandidate failed", err);
+              }
+            }
+            break;
         }
         return;
       }
@@ -76,12 +125,10 @@ const SpectrumView: Component<Props> = (props) => {
       if (!waterfall) return;
       const pixels = view.getUint16(0, true);
       if (pixels === 0) return;
-      // Layout: [u16 pixels][u8 min[pixels]][u8 max[pixels]]
       const max = new Uint8Array(view.buffer, 2 + pixels, pixels);
       waterfall.pushRow(max);
     };
 
-    // Re-send viewport on resize so server decimates to match new canvas width.
     const resizeObserver = new ResizeObserver(() => {
       const h = hello();
       if (h) sendViewport(h);
@@ -90,6 +137,7 @@ const SpectrumView: Component<Props> = (props) => {
 
     onCleanup(() => {
       resizeObserver.disconnect();
+      pc?.close();
       ws?.close();
     });
   });
@@ -98,6 +146,7 @@ const SpectrumView: Component<Props> = (props) => {
     <div class="spectrum-view">
       <div class="topbar">
         <span>status: {status()}</span>
+        <span>audio: {audioStatus()}</span>
         <span>frames: {frames()}</span>
         {hello() && (
           <span>
@@ -109,11 +158,9 @@ const SpectrumView: Component<Props> = (props) => {
         <button onClick={props.onLogout}>logout</button>
       </div>
 
-      <canvas
-        ref={canvas}
-        height={1024}
-        class="waterfall"
-      />
+      <canvas ref={canvas} height={1024} class="waterfall" />
+
+      <audio ref={audioEl} controls autoplay />
 
       <div class="controls">
         <fieldset>
@@ -131,7 +178,7 @@ const SpectrumView: Component<Props> = (props) => {
         <fieldset>
           <legend>demod</legend>
           <select disabled>
-            <option>FM (coming soon)</option>
+            <option>FM</option>
           </select>
         </fieldset>
         <fieldset>

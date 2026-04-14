@@ -8,8 +8,9 @@ use tokio::sync::broadcast;
 use crate::config::SdrConfig;
 use crate::error::Result;
 
+use super::fm_pipeline::AudioFrame;
 use super::spectrum_worker::SpectrumFrame;
-use super::{IqBroker, airspyhf_source, fake_source, spectrum_worker};
+use super::{IqBroker, airspyhf_source, fake_source, fm_pipeline, spectrum_worker};
 
 /// AirspyHF+ delivers 4096 Complex32 samples per callback invocation.
 const AIRSPYHF_BLOCK_SIZE: usize = 4096;
@@ -18,6 +19,7 @@ const AIRSPYHF_BLOCK_SIZE: usize = 4096;
 pub struct SdrHandle {
     broker: Arc<IqBroker>,
     spectrum_tx: broadcast::Sender<SpectrumFrame>,
+    audio_tx: broadcast::Sender<AudioFrame>,
     source: IqSource,
     config: SdrConfig,
 }
@@ -37,12 +39,14 @@ impl SdrHandle {
     pub fn start_hardware(config: SdrConfig) -> Result<Self> {
         let broker = Arc::new(IqBroker::new(AIRSPYHF_BLOCK_SIZE));
         let spectrum_tx = Self::spawn_spectrum(&broker, &config);
+        let audio_tx = Self::spawn_fm(&broker);
 
         let device = airspyhf_source::start(broker.clone(), config.center_hz, config.samplerate)?;
 
         Ok(Self {
             broker,
             spectrum_tx,
+            audio_tx,
             source: IqSource::Airspyhf(Some(device)),
             config,
         })
@@ -53,6 +57,7 @@ impl SdrHandle {
     pub fn start_fake(config: SdrConfig, tone_hz: f32) -> Self {
         let broker = Arc::new(IqBroker::new(fake_source::BLOCK_SIZE));
         let spectrum_tx = Self::spawn_spectrum(&broker, &config);
+        let audio_tx = Self::spawn_fm(&broker);
 
         let stop = Arc::new(AtomicBool::new(false));
         let thread = fake_source::spawn(broker.clone(), config.samplerate, tone_hz, stop.clone());
@@ -60,12 +65,19 @@ impl SdrHandle {
         Self {
             broker,
             spectrum_tx,
+            audio_tx,
             source: IqSource::Fake {
                 stop,
                 thread: Some(thread),
             },
             config,
         }
+    }
+
+    fn spawn_fm(broker: &Arc<IqBroker>) -> broadcast::Sender<AudioFrame> {
+        // Feed the pipeline block-at-a-time so the FIR ÷4 stays aligned.
+        let consumer = broker.subscribe(4096);
+        fm_pipeline::spawn(consumer, 0.0)
     }
 
     fn spawn_spectrum(
@@ -85,6 +97,10 @@ impl SdrHandle {
 
     pub fn subscribe_spectrum(&self) -> broadcast::Receiver<SpectrumFrame> {
         self.spectrum_tx.subscribe()
+    }
+
+    pub fn subscribe_audio(&self) -> broadcast::Receiver<AudioFrame> {
+        self.audio_tx.subscribe()
     }
 
     pub fn config(&self) -> &SdrConfig {
