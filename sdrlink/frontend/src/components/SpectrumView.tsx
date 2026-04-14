@@ -51,6 +51,14 @@ const SpectrumView: Component<Props> = (props) => {
     });
   };
 
+  const drawFrame = (view: DataView) => {
+    if (!waterfall) return;
+    const pixels = view.getUint16(0, true);
+    if (pixels === 0) return;
+    const max = new Uint8Array(view.buffer, 2 + pixels, pixels);
+    waterfall.pushRow(max);
+  };
+
   const startWebrtc = async () => {
     setAudioStatus("negotiating");
     pc = new RTCPeerConnection({
@@ -74,6 +82,17 @@ const SpectrumView: Component<Props> = (props) => {
       }
     };
 
+    // Unreliable/unordered data channel for spectrum frames.
+    const dc = pc.createDataChannel("spectrum", {
+      ordered: false,
+      maxRetransmits: 0,
+    });
+    dc.binaryType = "arraybuffer";
+    dc.onmessage = (e) => {
+      setFrames((n) => n + 1);
+      drawFrame(new DataView(e.data as ArrayBuffer));
+    };
+
     pc.addTransceiver("audio", { direction: "recvonly" });
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
@@ -86,57 +105,43 @@ const SpectrumView: Component<Props> = (props) => {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     const url = `${proto}//${location.host}/api/ws?token=${encodeURIComponent(props.token)}`;
     ws = new WebSocket(url);
-    ws.binaryType = "arraybuffer";
 
     ws.onopen = () => setStatus("connected");
     ws.onclose = () => setStatus("disconnected");
     ws.onerror = () => setStatus("error");
 
     ws.onmessage = async (e) => {
-      if (typeof e.data === "string") {
-        const msg = JSON.parse(e.data);
-        switch (msg.type) {
-          case "Hello": {
-            const h = msg.payload as Hello;
-            setHello(h);
-            sendViewport(h);
-            await startWebrtc();
-            break;
-          }
-          case "Answer":
-            if (pc) await pc.setRemoteDescription(msg.payload);
-            break;
-          case "CenterChanged": {
-            const h = hello();
-            if (h) {
-              const updated = { ...h, center_hz: msg.payload.hz };
-              setHello(updated);
-              sendViewport(updated);
-            }
-            break;
-          }
-          case "IceCandidate":
-            if (pc) {
-              try {
-                await pc.addIceCandidate(msg.payload);
-              } catch (err) {
-                console.warn("addIceCandidate failed", err);
-              }
-            }
-            break;
+      const msg = JSON.parse(e.data);
+      switch (msg.type) {
+        case "Hello": {
+          const h = msg.payload as Hello;
+          setHello(h);
+          sendViewport(h);
+          await startWebrtc();
+          break;
         }
-        return;
+        case "Answer":
+          if (pc) await pc.setRemoteDescription(msg.payload);
+          break;
+        case "CenterChanged": {
+          const h = hello();
+          if (h) {
+            const updated = { ...h, center_hz: msg.payload.hz };
+            setHello(updated);
+            sendViewport(updated);
+          }
+          break;
+        }
+        case "IceCandidate":
+          if (pc) {
+            try {
+              await pc.addIceCandidate(msg.payload);
+            } catch (err) {
+              console.warn("addIceCandidate failed", err);
+            }
+          }
+          break;
       }
-      setFrames((n) => n + 1);
-      drawFrame(new DataView(e.data));
-    };
-
-    const drawFrame = (view: DataView) => {
-      if (!waterfall) return;
-      const pixels = view.getUint16(0, true);
-      if (pixels === 0) return;
-      const max = new Uint8Array(view.buffer, 2 + pixels, pixels);
-      waterfall.pushRow(max);
     };
 
     const resizeObserver = new ResizeObserver(() => {
