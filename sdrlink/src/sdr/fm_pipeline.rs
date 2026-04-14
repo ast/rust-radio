@@ -3,7 +3,7 @@ use std::thread;
 use bytes::Bytes;
 use doublemap::Consumer;
 use filters::{
-    Decimator, FirDecimator, FmDemod,
+    Decimator, Deemphasis, FirDecimator, FmDemod,
     kernels::{FM_64, HB_35},
     rotate::ComplexRotator,
 };
@@ -22,6 +22,8 @@ pub const AUDIO_RATE: u32 = DEMOD_RATE / 4;
 const OPUS_FRAME_SAMPLES: usize = (AUDIO_RATE as usize / 1000) * 20;
 /// Broadcast-FM peak deviation.
 const FM_DEVIATION_HZ: f32 = 75_000.0;
+/// FM de-emphasis time constant: 50 µs (ITU R1, Europe).
+const FM_DEEMPHASIS_TAU_S: f32 = 50e-6;
 
 /// An Opus-encoded audio frame ready for a WebRTC track pump.
 #[derive(Clone, Debug)]
@@ -49,6 +51,7 @@ pub fn spawn(
             let mut demod = FmDemod::new(DEMOD_RATE as f32, FM_DEVIATION_HZ);
             let mut stage2: FirDecimator<f32, 35, 2> = FirDecimator::new(HB_35);
             let mut stage3: FirDecimator<f32, 35, 2> = FirDecimator::new(HB_35);
+            let mut deemph = Deemphasis::new(AUDIO_RATE as f32, FM_DEEMPHASIS_TAU_S);
 
             let mut encoder = match Encoder::new(AUDIO_RATE, Channels::Mono, Application::Audio) {
                 Ok(e) => e,
@@ -69,6 +72,7 @@ pub fn spawn(
                         let audio = demod.demod(iq_dec);
                         let Some(a1) = stage2.decimate(audio) else { continue };
                         let Some(a2) = stage3.decimate(a1) else { continue };
+                        let a2 = deemph.process(a2);
                         frame_buf.push(a2);
 
                         if frame_buf.len() == OPUS_FRAME_SAMPLES {

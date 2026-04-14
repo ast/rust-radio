@@ -1,9 +1,11 @@
+pub mod deemphasis;
 pub mod fir;
 pub mod fm_demod;
 pub mod ringbuffer;
 pub mod rotate;
 pub mod traits;
 
+pub use deemphasis::Deemphasis;
 pub use fm_demod::FmDemod;
 
 // Trait re-exports
