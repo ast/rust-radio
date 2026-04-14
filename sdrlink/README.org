@@ -15,8 +15,10 @@ spectrum frames on an unreliable/unordered data channel.
 - [X] AirspyHF+ hardware source (fake oscillator kept for tests)
 - [X] Per-client viewport min/max decimation
 - [X] FM demod pipeline (768k → 192k IQ → demod → 96k → 48k mono, Opus 20 ms)
+- [X] FM de-emphasis (50 µs, ITU R1)
 - [X] WebRTC audio (Opus) + unreliable =spectrum= data channel
 - [X] Runtime retune via wheel-scrollable VFO digits (GHz/MHz/kHz/10 Hz)
+- [X] Rectangle-select zoom on the waterfall (right-click = back, double-click = reset)
 - [X] Selectable perceptual colormaps (inferno, magma, plasma, viridis, cividis)
 
 ** Build
@@ -71,6 +73,13 @@ Scroll over the GHz/MHz/kHz/10-Hz digit groups in the =tuning= panel to
 retune; the change is broadcast to every connected client. Audio plays
 in the =<audio>= element below the waterfall.
 
+Click-drag a horizontal range on the waterfall to zoom in; the
+selection is shown as a translucent cyan rectangle. Right-click pops
+one step off the zoom history. Double-click resets to the full
+passband. The overlay in the top-left of the waterfall shows
+=start – stop MHz · span kHz · N back=. Retuning the VFO clears the
+zoom history.
+
 *** Frontend dev server
 
 Vite dev with HMR, proxied to the backend on 8081:
@@ -117,13 +126,14 @@ Defaults (=samplerate=, =fft_len=, =fft_rate_hz=) kick in if omitted.
   (Device      fan-out   │    (shared 32k FFT, u8 dB)   per-client min/max decim
    callback)             │
                          └──► fm_pipeline ──► broadcast<AudioFrame> ──► audio track pump
-                              (rotator → FM_64 ÷4 → FmDemod → HB_35 ÷2 ×2 → Opus)
+                              (rotator → FM_64 ÷4 → FmDemod → HB_35 ÷2 ×2 → 50µs deemph → Opus)
 #+end_src
 
 Building blocks come from sibling workspace crates: =airspyhf=,
 =doublemap= (SPSC memfd ring), =pool= (RAII =BufferPool=), =spectrum=
 (=Analyzer=), =filters= (=FirDecimator=, =ComplexRotator=, =FmDemod=,
-kernels =FM_64= and =HB_35=), =signals= (fake oscillator for tests).
+=Deemphasis=, kernels =FM_64= and =HB_35=), =signals= (fake oscillator
+for tests).
 
 ** Wire protocol
 
@@ -162,10 +172,56 @@ The server decimates the shared PDS to the client's current viewport
 width using per-column min/max (preserves narrow peaks at any zoom).
 The client uses =max= for the waterfall row.
 
+Each frame is =2 + 2 × pixels= bytes. The client picks =pixels= per
+=SetViewport= as
+
+#+begin_src text
+  pixels = max(64, min(canvas.clientWidth, span_in_bins, fft_len))
+#+end_src
+
+so wire size scales with display width and shrinks when zoomed in. At
+=fft_rate_hz = 20=:
+
+| pixels | bytes/frame | kbit/s |
+|--------+-------------+--------|
+|   1920 |        3842 |   ~615 |
+|   1024 |        2050 |   ~328 |
+|    512 |        1026 |   ~164 |
+|     64 |         130 |    ~21 |
+
 *** Media track: audio
 
 Opus, 48 kHz mono, 20 ms frames. Attached to the same PeerConnection;
 the browser plays it straight out of an =<audio>= element.
+
+** Compromises
+
+Deliberate shortcuts in the current build, recorded so future-me
+doesn't waste a session "fixing" them:
+
+- *Old waterfall rows aren't reprojected on zoom.* Each row was
+  decimated server-side for whatever viewport was in effect when it
+  arrived, so after a zoom, history rows above the most recent ones
+  still show their old frequency mapping until they scroll off (~1024
+  rows at 20 Hz ≈ 50 s). Doing this "right" would require sending each
+  frame's start/stop frequency on the wire and a per-row range texture
+  with shader-side reprojection — deferred.
+- *Deep-zoom reallocates the waterfall texture.* When zoom takes
+  =pixels= below the current canvas width, =Waterfall.allocSpectrum=
+  reallocates and clears the texture. The common case (zoom while
+  =pixels == canvas.clientWidth=) does not.
+- *Zoom history depth (=· N back=) isn't truly reactive.* The number
+  reads =history.length= (a plain =let=) inside JSX that re-renders
+  whenever =viewport()= changes. Works because every history mutation
+  happens alongside a viewport update.
+- *Drag <4 px is treated as a click.* Avoids accidental zoom-to-zero
+  on a sloppy click; gives up some precision near the edge of intent.
+- *No frequency-axis labels under the waterfall.* The viewport overlay
+  shows start/stop/span numerically; tick labels were skipped to keep
+  the canvas pixel-perfect and avoid text-rendering complications.
+- *FM de-emphasis is hard-coded to 50 µs.* North-American 75 µs would
+  need a =[fm] tau_us= knob; not added because the only operator is in
+  ITU R1.
 
 ** License
 
