@@ -56,6 +56,8 @@ const SpectrumView: Component<Props> = (props) => {
   const [cmap, setCmap] = createSignal<ColormapName>(DEFAULT_COLORMAP);
   const [selection, setSelection] = createSignal<{ x0: number; x1: number } | null>(null);
   const [demod, setDemod] = createSignal<DemodState | null>(null);
+  const [playing, setPlaying] = createSignal(false);
+  const [muted, setMuted] = createSignal(false);
   let canvas: HTMLCanvasElement | undefined;
   let audioEl: HTMLAudioElement | undefined;
   let ws: WebSocket | undefined;
@@ -356,9 +358,40 @@ const SpectrumView: Component<Props> = (props) => {
         )}
       </div>
 
-      <audio ref={audioEl} controls autoplay />
+      <audio
+        ref={audioEl}
+        autoplay
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onVolumeChange={() => audioEl && setMuted(audioEl.muted)}
+        style={{ display: "none" }}
+      />
 
       <div class="controls">
+        <fieldset>
+          <legend>audio</legend>
+          <button
+            type="button"
+            onClick={() => {
+              if (!audioEl) return;
+              if (audioEl.paused) audioEl.play().catch(() => {});
+              else audioEl.pause();
+            }}
+            title={playing() ? "pause" : "play"}
+          >
+            {playing() ? "⏸" : "▶"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!audioEl) return;
+              audioEl.muted = !audioEl.muted;
+            }}
+            title={muted() ? "unmute" : "mute"}
+          >
+            {muted() ? "🔇" : "🔊"}
+          </button>
+        </fieldset>
         <fieldset>
           <legend>tuning</legend>
           {hello() && (
@@ -387,22 +420,19 @@ const SpectrumView: Component<Props> = (props) => {
           </select>
         </fieldset>
         <fieldset>
-          <legend>display</legend>
-          <label>
-            colormap
-            <select
-              value={cmap()}
-              onChange={(e) => {
-                const name = e.currentTarget.value as ColormapName;
-                setCmap(name);
-                waterfall?.setColormap(colormap(name));
-              }}
-            >
-              {COLORMAP_NAMES.map((n) => (
-                <option value={n}>{n}</option>
-              ))}
-            </select>
-          </label>
+          <legend>colormap</legend>
+          <select
+            value={cmap()}
+            onChange={(e) => {
+              const name = e.currentTarget.value as ColormapName;
+              setCmap(name);
+              waterfall?.setColormap(colormap(name));
+            }}
+          >
+            {COLORMAP_NAMES.map((n) => (
+              <option value={n}>{n}</option>
+            ))}
+          </select>
         </fieldset>
       </div>
     </div>
