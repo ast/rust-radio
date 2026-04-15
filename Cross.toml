@@ -5,5 +5,13 @@ image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:main"
 pre-build = [
     "dpkg --add-architecture arm64",
     "apt-get update",
-    "apt-get install --assume-yes libasound2-dev:arm64 libopus-dev:arm64 pkg-config cmake"
+    "apt-get install --assume-yes libasound2-dev:arm64 libopus-dev:arm64 libusb-1.0-0-dev:arm64 pkg-config cmake git ca-certificates",
+    # Debian's libairspyhf-dev is too old (missing airspyhf_set_freq_double).
+    # Build from source for arm64 and install into the sysroot so airspyhf-sys
+    # bindgen + linking both find it.
+    "git clone --depth 1 https://github.com/airspy/airspyhf.git /tmp/airspyhf",
+    # Install headers to /usr/include (where bindgen's clang finds them) and
+    # the .so to /usr/lib/aarch64-linux-gnu (where the arm64 linker finds it).
+    "cmake -S /tmp/airspyhf/libairspyhf -B /tmp/airspyhf/build -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib/aarch64-linux-gnu",
+    "cmake --build /tmp/airspyhf/build --target install",
 ]

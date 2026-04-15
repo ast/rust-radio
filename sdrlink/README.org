@@ -27,7 +27,25 @@ System deps:
 
 #+begin_src bash
   # Debian/Ubuntu
-  sudo apt install libasound2-dev cmake nodejs npm
+  sudo apt install libasound2-dev cmake nodejs npm libusb-1.0-0-dev git build-essential
+#+end_src
+
+=libairspyhf= is required at build and run time. Debian's packaged
+version is pre-1.8 and missing =airspyhf_set_freq_double=, so build
+from upstream:
+
+#+begin_src bash
+  git clone https://github.com/airspy/airspyhf.git
+  cmake -S airspyhf/libairspyhf -B airspyhf/build
+  sudo cmake --build airspyhf/build --target install
+  sudo ldconfig
+#+end_src
+
+Copy the udev rules so non-root users can open the device:
+
+#+begin_src bash
+  sudo cp airspyhf/tools/52-airspyhf.rules /etc/udev/rules.d/
+  sudo udevadm control --reload-rules && sudo udevadm trigger
 #+end_src
 
 Build the frontend first so =rust-embed= picks up =frontend/dist=:

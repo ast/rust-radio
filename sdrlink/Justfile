@@ -1,3 +1,10 @@
+binary := "sdrlink"
+target_pi := "aarch64-unknown-linux-gnu"
+remote := "shack"
+config := "sdrlink.example.toml"
+workspace := justfile_directory() / ".."
+target_dir := workspace / "target"
+
 run: frontend-build
     RUST_LOG=sdrlink=info cargo run -p sdrlink -- --config sdrlink.example.toml serve
 
@@ -9,3 +16,20 @@ frontend-dev:
 
 frontend-build:
     cd frontend && npm install && npm run build
+
+# Build frontend then cross-compile backend (with embedded assets) for Pi
+build: frontend-build build-pi
+
+# Cross-compile backend for Raspberry Pi (release — debug is too slow for DSP)
+build-pi:
+    cross build -p {{binary}} --target {{target_pi}} --release
+
+# Stop sdrlink on the Pi (- ignores error if no process is running)
+stop:
+    -ssh {{remote}} "pkill {{binary}}"
+
+# Full deploy: build, upload, stop, and run
+deploy args="": build stop
+    scp {{target_dir}}/{{target_pi}}/release/{{binary}} {{remote}}:~/
+    scp {{config}} {{remote}}:~/
+    ssh {{remote}} "RUST_LOG=sdrlink=info ~/{{binary}} --config ~/{{config}} serve {{args}}"

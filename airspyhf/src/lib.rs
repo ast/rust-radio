@@ -322,7 +322,7 @@ impl Device {
         let ret = unsafe {
             airspyhf_version_string_read(
                 self.handle.as_ptr(),
-                version.as_mut_ptr() as *mut i8,
+                version.as_mut_ptr() as *mut _,
                 version.len() as u8,
             )
         };
