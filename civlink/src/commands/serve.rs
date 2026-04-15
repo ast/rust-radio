@@ -64,7 +64,16 @@ pub async fn run(config: Config) -> Result<()> {
         .fallback(static_handler);
 
     let listener = TcpListener::bind(&config.server.listen_addr).await?;
-    tracing::info!("listening on {}", config.server.listen_addr);
+    let local = listener.local_addr()?;
+    // Terminals render http:// URLs as clickable; rewrite a wildcard bind to
+    // localhost so the link opens the right place.
+    let host = match local.ip() {
+        std::net::IpAddr::V4(ip) if ip.is_unspecified() => "localhost".to_string(),
+        std::net::IpAddr::V6(ip) if ip.is_unspecified() => "localhost".to_string(),
+        std::net::IpAddr::V6(ip) => format!("[{ip}]"),
+        std::net::IpAddr::V4(ip) => ip.to_string(),
+    };
+    tracing::info!("listening on http://{host}:{}", local.port());
 
     axum::serve(listener, app).await?;
 

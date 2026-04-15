@@ -1,11 +1,11 @@
-run:
+run: frontend-build
     RUST_LOG=sdrlink=info cargo run -p sdrlink -- --config sdrlink.example.toml serve
 
-run-release:
+run-release: frontend-build
     RUST_LOG=sdrlink=info cargo run --release -p sdrlink -- --config sdrlink.example.toml serve
 
 frontend-dev:
     cd frontend && npm run dev
 
 frontend-build:
-    cd frontend && npm run build
+    cd frontend && npm install && npm run build
