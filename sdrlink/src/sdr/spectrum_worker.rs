@@ -46,18 +46,26 @@ pub fn spawn(
                     let emit = decimate_by == 0 || frame_counter % decimate_by == 0;
 
                     if emit && tx.receiver_count() > 0 {
-                        let mut pds = pds_pool.get();
-                        analyzer.process(&input[..fft_len], &mut pds);
+                        // Non-blocking pool access: a slow listener holding
+                        // `Shared<u8>` frames can exhaust `u8_pool`; stalling
+                        // here would fill the IQ ring and back-pressure the
+                        // USB callback. Skip the frame instead.
+                        if let (Some(mut pds), Some(mut out)) =
+                            (pds_pool.try_get(), u8_pool.try_get())
+                        {
+                            analyzer.process(&input[..fft_len], &mut pds);
 
-                        // Quantize f32 dBFS -> u8 over [DB_MIN, DB_MAX].
-                        let scale = 255.0 / (DB_MAX - DB_MIN);
-                        let mut out = u8_pool.get();
-                        for (dst, &db) in out.iter_mut().zip(pds.iter()) {
-                            let clamped = db.clamp(DB_MIN, DB_MAX);
-                            *dst = ((clamped - DB_MIN) * scale).round() as u8;
-                        }
-                        if let Err(e) = tx.send(out.freeze()) {
-                            debug!("no spectrum receivers: {e}");
+                            // Quantize f32 dBFS -> u8 over [DB_MIN, DB_MAX].
+                            let scale = 255.0 / (DB_MAX - DB_MIN);
+                            for (dst, &db) in out.iter_mut().zip(pds.iter()) {
+                                let clamped = db.clamp(DB_MIN, DB_MAX);
+                                *dst = ((clamped - DB_MIN) * scale).round() as u8;
+                            }
+                            if let Err(e) = tx.send(out.freeze()) {
+                                debug!("no spectrum receivers: {e}");
+                            }
+                        } else {
+                            warn!("spectrum pool exhausted, dropping frame");
                         }
                     }
 

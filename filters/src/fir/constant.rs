@@ -7,16 +7,21 @@ use crate::ringbuffer::RingBuffer;
 use super::dot_product;
 
 /// FirFilter — const-generic FIR filter with stack-allocated coefficients.
+///
+/// Convention: `h` is the impulse response in natural order (`h[0]` applies
+/// to the newest sample) and reversed once in `new`; see the crate-level
+/// note in [`NaiveFirFilter`].
 pub struct FirFilter<T, const N: usize> {
-    h: [f32; N],      // real-valued FIR coefficients
-    z: RingBuffer<T>, // delay buffer
+    h: [f32; N],      // real-valued FIR coefficients, stored reversed
+    z: RingBuffer<T>, // delay buffer (oldest-first on read)
 }
 
 impl<T, const N: usize> FirFilter<T, N>
 where
     T: Copy + Default,
 {
-    pub fn new(h: [f32; N]) -> Self {
+    pub fn new(mut h: [f32; N]) -> Self {
+        h.reverse();
         let taps = h.len();
         FirFilter {
             h,

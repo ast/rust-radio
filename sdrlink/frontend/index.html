@@ -32,7 +32,19 @@
         border-bottom: 1px solid #333;
         font-size: 0.85rem;
       }
-      .topbar button { margin-left: auto; }
+      .topbar button {
+        margin-left: auto;
+        padding: 0.35rem 0.75rem;
+        background: transparent;
+        color: #ddd;
+        border: 1px solid #333;
+        border-radius: 2px;
+        font-size: 0.8rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        cursor: pointer;
+      }
+      .topbar button:hover { border-color: #8fd; color: #8fd; }
       .waterfall-wrap {
         flex: 1 1 auto;
         min-height: 0;
@@ -152,8 +164,51 @@
       }
 
       /* Login screen */
-      form { padding: 2rem; max-width: 20rem; }
-      form input { display: block; width: 100%; margin: 0.25rem 0; box-sizing: border-box; }
+      .login-form {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 20rem;
+        margin: 6rem auto;
+        padding: 2rem;
+        background: #1a1a1a;
+        border: 1px solid #333;
+        border-radius: 4px;
+      }
+      .login-form h1 {
+        text-align: center;
+        margin: 0 0 0.5rem;
+        font-size: 1.4rem;
+        font-weight: 400;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: #eee;
+      }
+      .login-form input {
+        box-sizing: border-box;
+        width: 100%;
+        padding: 0.5rem 0.6rem;
+        background: #111;
+        color: #ddd;
+        border: 1px solid #333;
+        border-radius: 2px;
+      }
+      .login-form button {
+        padding: 0.5rem;
+        border: none;
+        border-radius: 2px;
+        background: #8fd;
+        color: #111;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        cursor: pointer;
+      }
+      .login-form button:hover { filter: brightness(1.1); }
+      .login-form button:disabled { cursor: default; opacity: 0.6; }
+      .login-error { color: tomato; text-align: center; font-size: 0.85rem; }
     </style>
   </head>
   <body>

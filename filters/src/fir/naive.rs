@@ -2,7 +2,15 @@ use crate::Filter;
 use std::collections::VecDeque;
 use std::ops::{Add, Mul};
 
-/// Naive FIR filter implementation, useful for testing and educational purposes.
+/// Naive FIR filter — reference implementation used to cross-check the
+/// optimized variants in tests.
+///
+/// Convention: `h` is the impulse response in natural order (`h[0]` is the
+/// coefficient applied to the newest sample). Internally it's reversed once
+/// at construction so the delay line — which yields samples oldest-first —
+/// can be consumed with a plain `Σ h_stored[i] · z[i]`, giving the textbook
+/// `y[n] = Σ h[k] · x[n-k]`. All other FIR impls in this crate follow the
+/// same convention.
 pub struct NaiveFirFilter<T> {
     h: Vec<f32>,
     z: VecDeque<T>,
@@ -12,7 +20,8 @@ impl<T> NaiveFirFilter<T>
 where
     T: Copy + Default,
 {
-    pub fn new(h: Vec<f32>) -> Self {
+    pub fn new(mut h: Vec<f32>) -> Self {
+        h.reverse();
         let len = h.len();
 
         NaiveFirFilter {

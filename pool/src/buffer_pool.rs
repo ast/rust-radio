@@ -32,6 +32,17 @@ impl<T: Default + Clone> BufferPool<T> {
         }
     }
 
+    /// Non-blocking variant. Returns `None` when the pool is empty so the
+    /// caller can skip the allocation (e.g. drop a frame) instead of stalling.
+    pub fn try_get(self: &Arc<Self>) -> Option<BufferGuard<T>> {
+        let mut pool = self.pool.lock();
+        let buffer = pool.pop()?;
+        Some(BufferGuard {
+            buffer: Some(buffer),
+            pool: Arc::clone(self),
+        })
+    }
+
     fn put(&self, buffer: Arc<Vec<T>>) {
         let mut pool = self.pool.lock();
 

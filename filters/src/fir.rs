@@ -55,3 +55,69 @@ where
     }
     acc
 }
+
+#[cfg(test)]
+mod tests {
+    //! Convention regression: every FIR impl in this crate treats `h` as the
+    //! impulse response in natural order (`h[0]` applies to the newest
+    //! sample) and reverses it once at construction. All real kernels shipped
+    //! in `kernels.rs` are symmetric, so a silently-swapped convention would
+    //! not surface in the "matches-naive" tests. Drive every impl with an
+    //! asymmetric kernel whose output differs under correlation vs.
+    //! convolution so a future regression fails loudly.
+
+    use crate::{DynFirFilter, Filter, FirDecimator, FirFilter, NaiveFirFilter};
+    use num_complex::Complex32;
+
+    use super::dynamic_cplx::DynFirComplex;
+
+    const ASYM: [f32; 3] = [1.0, 0.0, 0.0];
+    const IN: [f32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0];
+    // y[n] = 1·x[n] + 0·x[n-1] + 0·x[n-2] = x[n]
+    const EXPECTED: [f32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0];
+
+    fn apply<F: Filter<f32>>(mut f: F) -> Vec<f32> {
+        IN.iter().map(|&x| f.filter(x)).collect()
+    }
+
+    #[test]
+    fn naive_is_convolution_not_correlation() {
+        let out = apply(NaiveFirFilter::<f32>::new(ASYM.to_vec()));
+        assert_eq!(out, EXPECTED);
+    }
+
+    #[test]
+    fn dyn_is_convolution_not_correlation() {
+        let out = apply(DynFirFilter::<f32>::new(ASYM.to_vec()));
+        assert_eq!(out, EXPECTED);
+    }
+
+    #[test]
+    fn const_is_convolution_not_correlation() {
+        let out = apply(FirFilter::<f32, 3>::new(ASYM));
+        assert_eq!(out, EXPECTED);
+    }
+
+    #[test]
+    fn decimator_is_convolution_not_correlation() {
+        // D=1 — every input emits one output; same expected values as Filter.
+        let mut d = FirDecimator::<f32, 3, 1>::new(ASYM);
+        use crate::Decimator;
+        let out: Vec<f32> = IN.iter().filter_map(|&x| d.decimate(x)).collect();
+        assert_eq!(out, EXPECTED);
+    }
+
+    #[test]
+    fn dyn_cplx_is_convolution_not_correlation() {
+        // Same identity kernel, promoted to Complex32.
+        let h: Vec<Complex32> = ASYM.iter().map(|&c| Complex32::new(c, 0.0)).collect();
+        let mut f = DynFirComplex::new(h);
+        let out: Vec<Complex32> = IN
+            .iter()
+            .map(|&x| f.filter(Complex32::new(x, 0.0)))
+            .collect();
+        for (got, want) in out.iter().zip(EXPECTED.iter()) {
+            assert!((got.re - want).abs() < 1e-6 && got.im.abs() < 1e-6);
+        }
+    }
+}

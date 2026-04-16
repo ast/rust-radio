@@ -34,29 +34,25 @@ const Login: Component<Props> = (props) => {
   };
 
   return (
-    <form onSubmit={submit}>
+    <form class="login-form" onSubmit={submit}>
       <h1>sdrlink</h1>
-      <div>
-        <input
-          placeholder="username"
-          value={username()}
-          onInput={(e) => setUsername(e.currentTarget.value)}
-          autocomplete="username"
-        />
-      </div>
-      <div>
-        <input
-          type="password"
-          placeholder="password"
-          value={password()}
-          onInput={(e) => setPassword(e.currentTarget.value)}
-          autocomplete="current-password"
-        />
-      </div>
+      {error() && <div class="login-error">{error()}</div>}
+      <input
+        placeholder="username"
+        value={username()}
+        onInput={(e) => setUsername(e.currentTarget.value)}
+        autocomplete="username"
+      />
+      <input
+        type="password"
+        placeholder="password"
+        value={password()}
+        onInput={(e) => setPassword(e.currentTarget.value)}
+        autocomplete="current-password"
+      />
       <button type="submit" disabled={busy()}>
         {busy() ? "…" : "login"}
       </button>
-      {error() && <div style={{ color: "tomato" }}>{error()}</div>}
     </form>
   );
 };

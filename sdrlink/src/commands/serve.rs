@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Result;
 use axum::Router;
@@ -9,6 +10,8 @@ use crate::config::Config;
 use crate::sdr::SdrHandle;
 use crate::server::router::api_router;
 use crate::server::static_files::static_handler;
+
+const SESSION_SWEEP_INTERVAL: Duration = Duration::from_secs(60 * 60);
 
 pub async fn run(config: Config) -> Result<()> {
     tracing::info!("starting sdrlink server");
@@ -26,6 +29,18 @@ pub async fn run(config: Config) -> Result<()> {
     tracing::info!("airspyhf source started");
 
     let state = AppState::new(config.clone(), sdr);
+
+    {
+        let state = Arc::clone(&state);
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(SESSION_SWEEP_INTERVAL);
+            ticker.tick().await;
+            loop {
+                ticker.tick().await;
+                state.sessions.remove_expired().await;
+            }
+        });
+    }
 
     let app = Router::new()
         .nest("/api", api_router(Arc::clone(&state)))

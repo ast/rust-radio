@@ -43,19 +43,32 @@ impl IqBroker {
 
     /// Broadcast a block of IQ samples to all live consumers.
     ///
-    /// Drops any subscription whose consumer has been dropped. Will back-
-    /// pressure the caller if any ring is full — per-consumer rings are
-    /// sized so this only happens on sustained consumer stall.
+    /// Non-blocking: if a consumer's ring doesn't have room for the block we
+    /// drop it for that consumer rather than stalling the caller. The caller
+    /// is the upstream USB callback thread (airspyhf), and blocking there
+    /// stalls the whole capture — dropping samples for a slow listener is
+    /// the correct real-time tradeoff. Subscriptions whose consumer has been
+    /// dropped are pruned on the next broadcast.
     pub fn broadcast(&self, samples: &[Complex32]) {
         let mut producers = self.producers.lock().unwrap();
+        let mut dropped = 0usize;
         producers.retain(|p| {
-            p.produce(|slice| {
+            match p.try_produce(|slice| {
                 let n = samples.len().min(slice.len());
                 slice[..n].copy_from_slice(&samples[..n]);
                 n
-            })
-            .is_ok()
+            }) {
+                Ok(true) => true,
+                Ok(false) => {
+                    dropped += 1;
+                    true
+                }
+                Err(_) => false,
+            }
         });
+        if dropped > 0 {
+            tracing::warn!(dropped, "iq_broker: slow consumer, dropped block(s)");
+        }
     }
 
     pub fn subscriber_count(&self) -> usize {

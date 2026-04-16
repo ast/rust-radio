@@ -135,6 +135,38 @@ impl<T: Copy> Producer<T> {
 
         Ok(())
     }
+
+    /// Non-blocking variant of [`Self::produce`]. Returns `Ok(true)` when the
+    /// closure ran and data was written, `Ok(false)` when the buffer lacked
+    /// room for `required` items (caller should drop the frame), and `Err`
+    /// when the consumer has been dropped.
+    pub fn try_produce<F>(&self, f: F) -> Result<bool, Disconnected>
+    where
+        F: FnOnce(&mut [T]) -> usize,
+    {
+        let Shared { buffer, condvar } = &*self.shared;
+        let mut buffer = buffer.lock();
+
+        if !buffer.consumer_alive {
+            return Err(Disconnected);
+        }
+
+        if buffer.free() < self.required {
+            return Ok(false);
+        }
+
+        let produced = {
+            let write_slice = buffer.as_mut_slice();
+            f(write_slice)
+        };
+        buffer.produce(produced);
+
+        if buffer.len() >= self.consumer_required {
+            condvar.notify_one();
+        }
+
+        Ok(true)
+    }
 }
 
 impl<T> Drop for Producer<T> {
@@ -384,6 +416,48 @@ mod tests {
 
         producer_thread.join().unwrap();
         consumer_thread.join().unwrap();
+    }
+
+    #[test]
+    fn test_try_produce_returns_false_when_full() {
+        let (producer, consumer) = ring_buffer_pair::<u8>(64, 64);
+
+        let cap = producer.shared.buffer.lock().capacity();
+
+        // Fill to capacity so there's no room left for `required` items.
+        producer
+            .produce(|slice| {
+                let n = slice.len().min(cap);
+                for i in 0..n {
+                    slice[i] = 1;
+                }
+                n
+            })
+            .unwrap();
+
+        // Next try_produce must refuse (no space, but consumer still alive).
+        let wrote = producer
+            .try_produce(|_| panic!("closure must not run when full"))
+            .unwrap();
+        assert!(!wrote, "should report no-write when buffer is full");
+
+        // Drain a chunk then try again — this time it should write.
+        consumer.consume(|slice| slice.len().min(64)).unwrap();
+        let wrote = producer
+            .try_produce(|slice| {
+                slice[0] = 42;
+                1
+            })
+            .unwrap();
+        assert!(wrote, "should write once space is available");
+    }
+
+    #[test]
+    fn test_try_produce_disconnected_when_consumer_dropped() {
+        let (producer, consumer) = ring_buffer_pair::<u8>(64, 64);
+        drop(consumer);
+        let result = producer.try_produce(|_| 0);
+        assert!(result.is_err(), "should report Disconnected");
     }
 
     #[test]

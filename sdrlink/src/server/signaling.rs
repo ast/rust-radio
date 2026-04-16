@@ -146,8 +146,13 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                             let _ = viewport_tx.send(vp);
                         }
                         Ok(SignalingMessage::SetCenter { hz }) => {
-                            if let Err(e) = state.sdr.set_center_hz(hz) {
-                                tracing::error!("set_center_hz failed: {e}");
+                            match state.sdr.set_center_hz(hz) {
+                                // Update the local center immediately so a
+                                // viewport message arriving before the
+                                // `CenterChanged` broadcast is evaluated
+                                // against the new center, not the stale one.
+                                Ok(()) => current_center = hz,
+                                Err(e) => tracing::error!("set_center_hz failed: {e}"),
                             }
                         }
                         Ok(SignalingMessage::Offer(offer)) => {

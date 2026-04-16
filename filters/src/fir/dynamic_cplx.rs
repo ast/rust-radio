@@ -6,6 +6,13 @@ use crate::ringbuffer::RingBuffer;
 /// Runtime-sized FIR filter with complex-valued coefficients operating
 /// on complex samples. Used for asymmetric bandpass filters (SSB
 /// selection) where the passband is one-sided around DC.
+///
+/// Convention: `h` is the impulse response in natural order (`h[0]`
+/// applies to the newest sample) and reversed once in `new`; see the
+/// crate-level note in [`super::naive::NaiveFirFilter`]. This is the same
+/// convention as every other FIR impl in the crate — the reversal is
+/// load-bearing here because the SSB kernel is asymmetric, and was the
+/// original reason the convention was documented.
 pub struct DynFirComplex {
     h: Vec<Complex32>,
     z: RingBuffer<Complex32>,
@@ -13,9 +20,6 @@ pub struct DynFirComplex {
 
 impl DynFirComplex {
     pub fn new(mut h: Vec<Complex32>) -> Self {
-        // RingBuffer::as_slice returns samples oldest-first, so h[i] · z[i]
-        // applies the kernel in reverse time order. Reverse h so the runtime
-        // convolution matches standard y[n] = Σ h[k]·x[n-k].
         h.reverse();
         let taps = h.len();
         DynFirComplex {

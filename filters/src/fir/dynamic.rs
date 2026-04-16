@@ -7,16 +7,21 @@ use crate::ringbuffer::RingBuffer;
 use super::dot_product;
 
 /// DynFirFilter — runtime-sized FIR filter with doublemap ring buffer delay line.
+///
+/// Convention: `h` is passed as the impulse response in natural order
+/// (`h[0]` applies to the newest sample) and reversed once in `new`; see
+/// the crate-level note in [`NaiveFirFilter`].
 pub struct DynFirFilter<T> {
-    h: Vec<f32>,      // real-valued FIR coefficients
-    z: RingBuffer<T>, // delay buffer
+    h: Vec<f32>,      // real-valued FIR coefficients, stored reversed
+    z: RingBuffer<T>, // delay buffer (oldest-first on read)
 }
 
 impl<T> DynFirFilter<T>
 where
     T: Copy + Default,
 {
-    pub fn new(h: Vec<f32>) -> Self {
+    pub fn new(mut h: Vec<f32>) -> Self {
+        h.reverse();
         let taps = h.len();
         DynFirFilter {
             h,

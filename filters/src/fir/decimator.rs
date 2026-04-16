@@ -6,9 +6,13 @@ use std::ops::{Add, Mul};
 use super::dot_product;
 
 /// FirDecimator with power of two decimation factor.
+///
+/// Convention: `h` is the impulse response in natural order (`h[0]` applies
+/// to the newest sample) and reversed once in `new`; see the crate-level
+/// note in [`super::naive::NaiveFirFilter`].
 pub struct FirDecimator<T, const N: usize, const D: usize = 2> {
-    h: [f32; N],      // real-valued FIR coefficients
-    z: RingBuffer<T>, // delay buffer
+    h: [f32; N],      // real-valued FIR coefficients, stored reversed
+    z: RingBuffer<T>, // delay buffer (oldest-first on read)
     sample: usize,    // sample counter for decimation
 }
 
@@ -16,9 +20,10 @@ impl<T, const N: usize, const D: usize> FirDecimator<T, N, D>
 where
     T: Copy + Default,
 {
-    pub fn new(h: [f32; N]) -> Self {
+    pub fn new(mut h: [f32; N]) -> Self {
         assert!(D.is_power_of_two(), "D must be a power of two");
 
+        h.reverse();
         let taps = h.len();
         FirDecimator {
             h,

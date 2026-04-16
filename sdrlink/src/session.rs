@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
-const SESSION_TTL: Duration = Duration::from_secs(24 * 60 * 60);
+pub const SESSION_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 
 pub struct Session {
     pub username: String,
@@ -11,6 +11,7 @@ pub struct Session {
 
 pub struct SessionStore {
     sessions: RwLock<HashMap<String, Session>>,
+    ttl: Duration,
 }
 
 impl Default for SessionStore {
@@ -21,8 +22,13 @@ impl Default for SessionStore {
 
 impl SessionStore {
     pub fn new() -> Self {
+        Self::with_ttl(SESSION_TTL)
+    }
+
+    pub fn with_ttl(ttl: Duration) -> Self {
         Self {
             sessions: RwLock::new(HashMap::new()),
+            ttl,
         }
     }
 
@@ -35,11 +41,15 @@ impl SessionStore {
     }
 
     pub async fn username(&self, token: &str) -> Option<String> {
-        self.sessions
-            .read()
-            .await
+        let mut sessions = self.sessions.write().await;
+        let expired = sessions
             .get(token)
-            .map(|s| s.username.clone())
+            .is_some_and(|s| s.created_at.elapsed() >= self.ttl);
+        if expired {
+            sessions.remove(token);
+            return None;
+        }
+        sessions.get(token).map(|s| s.username.clone())
     }
 
     pub async fn remove(&self, token: &str) {
@@ -47,9 +57,10 @@ impl SessionStore {
     }
 
     pub async fn remove_expired(&self) {
+        let ttl = self.ttl;
         self.sessions
             .write()
             .await
-            .retain(|_, s| s.created_at.elapsed() < SESSION_TTL);
+            .retain(|_, s| s.created_at.elapsed() < ttl);
     }
 }

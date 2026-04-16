@@ -55,6 +55,19 @@ impl<T: Default + Clone> SharedBufferPool<T> {
         }
     }
 
+    /// Non-blocking variant. Returns `None` when all buffers are outstanding
+    /// so the caller can drop the frame instead of blocking.
+    pub fn try_get(self: &Arc<Self>) -> Option<BufferMut<T>> {
+        let mut pool = self.pool.lock();
+        let buf = pool.pop()?;
+        Some(BufferMut {
+            inner: Arc::new(Inner {
+                buf: ManuallyDrop::new(buf),
+                pool: Arc::downgrade(self),
+            }),
+        })
+    }
+
     fn put(&self, buf: Vec<T>) {
         let mut pool = self.pool.lock();
         pool.push(buf);
