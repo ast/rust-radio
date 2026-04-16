@@ -230,17 +230,14 @@ TypeScript is listed as a dev dependency in =frontend/package.json= so =npm inst
 The frontend is embedded into the binary at compile time via =rust-embed=, so building the frontend first is required.
 
 #+BEGIN_SRC bash
-# Frontend (produces frontend/dist/)
-cd frontend && npm install && npm run build
-
-# Backend (embeds frontend/dist/ into the binary)
-cargo build -p civlink --release
+just build-frontend                   # produces frontend/dist/
+cargo build -p civlink --release      # embeds frontend/dist/ into the binary
 #+END_SRC
 
-Or use the Justfile:
+Or build everything (frontend + cross-compiled aarch64 binary) in one step:
 
 #+BEGIN_SRC bash
-just build                            # build frontend then cross-compile for Pi
+just build                            # build-frontend + build-aarch64
 #+END_SRC
 
 * Configuration
@@ -275,8 +272,14 @@ civlink -c civlink.toml user-remove sm6wjm
 * Running
 
 #+BEGIN_SRC bash
-# Start the server
-civlink -c civlink.toml serve
+just run           # debug build
+just run-release   # release build
+#+END_SRC
+
+Or invoke the binary directly:
+
+#+BEGIN_SRC bash
+civlink --config civlink.toml serve
 #+END_SRC
 
 Then open =http://localhost:8080= in a browser and log in.
@@ -287,10 +290,10 @@ For frontend development with hot reload:
 
 #+BEGIN_SRC bash
 # Terminal 1: start the backend
-cargo run -p civlink -- -c civlink.toml serve
+just run
 
 # Terminal 2: start the vite dev server
-cd frontend && npm run dev
+just frontend-dev
 #+END_SRC
 
 * Deployment to Raspberry Pi
@@ -301,12 +304,12 @@ The binary is self-contained (frontend assets embedded). Deploy to the Pi (hostn
 just deploy                           # build, upload, stop old process, and run
 #+END_SRC
 
-Or manually:
+Or step-by-step:
 
 #+BEGIN_SRC bash
-cross build -p civlink --target aarch64-unknown-linux-gnu --release
+just build-aarch64                    # cross-compile release binary for Pi
 scp target/aarch64-unknown-linux-gnu/release/civlink shack:~/
-ssh shack "RUST_LOG=civlink=debug ~/civlink -c ~/civlink.toml serve"
+ssh shack "RUST_LOG=civlink=info ~/civlink --config ~/civlink.toml serve"
 #+END_SRC
 
 * Scope modes

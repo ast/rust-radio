@@ -5,23 +5,35 @@ config := "sdrlink.example.toml"
 workspace := justfile_directory() / ".."
 target_dir := workspace / "target"
 
-run: frontend-build
-    RUST_LOG=sdrlink=info cargo run -p sdrlink -- --config sdrlink.example.toml serve
+# --- Local commands ---
 
-run-release: frontend-build
-    RUST_LOG=sdrlink=info cargo run --release -p sdrlink -- --config sdrlink.example.toml serve
+# Build frontend then run backend locally
+run args="": build-frontend
+    RUST_LOG={{binary}}=info cargo run -p {{binary}} -- --config {{config}} serve {{args}}
 
+# Build frontend then run release backend locally
+run-release args="": build-frontend
+    RUST_LOG={{binary}}=info cargo run --release -p {{binary}} -- --config {{config}} serve {{args}}
+
+# Vite dev server for the frontend
 frontend-dev:
     cd frontend && npm run dev
 
-frontend-build:
+# Build frontend bundle
+build-frontend:
     cd frontend && npm install && npm run build
 
-# Build frontend then cross-compile backend (with embedded assets) for Pi
-build: frontend-build build-pi
+# Run tests
+test:
+    cargo test -p {{binary}}
 
-# Cross-compile backend for Raspberry Pi (release — debug is too slow for DSP)
-build-pi:
+# --- Remote deploy (Raspberry Pi) ---
+
+# Build frontend then cross-compile backend (with embedded assets) for Pi
+build: build-frontend build-aarch64
+
+# Cross-compile backend for Raspberry Pi (release - debug is too slow for DSP)
+build-aarch64:
     cross build -p {{binary}} --target {{target_pi}} --release
 
 # Stop sdrlink on the Pi (- ignores error if no process is running)
@@ -32,4 +44,4 @@ stop:
 deploy args="": build stop
     scp {{target_dir}}/{{target_pi}}/release/{{binary}} {{remote}}:~/
     scp {{config}} {{remote}}:~/
-    ssh {{remote}} "RUST_LOG=sdrlink=info ~/{{binary}} --config ~/{{config}} serve {{args}}"
+    ssh {{remote}} "RUST_LOG={{binary}}=info ~/{{binary}} --config ~/{{config}} serve {{args}}"

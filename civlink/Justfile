@@ -5,16 +5,36 @@ config := "civlink.toml"
 workspace := justfile_directory() / ".."
 target_dir := workspace / "target"
 
-# Build frontend then cross-compile backend (with embedded assets) for Pi
-build: build-frontend build-pi
+# --- Local commands ---
 
-# Cross-compile backend for Raspberry Pi
-build-pi:
-    cross build -p {{binary}} --target {{target_pi}} --release
+# Build frontend then run backend locally
+run args="": build-frontend
+    RUST_LOG={{binary}}=info cargo run -p {{binary}} -- --config {{config}} serve {{args}}
 
-# Build frontend
+# Build frontend then run release backend locally
+run-release args="": build-frontend
+    RUST_LOG={{binary}}=info cargo run --release -p {{binary}} -- --config {{config}} serve {{args}}
+
+# Vite dev server for the frontend
+frontend-dev:
+    cd frontend && npm run dev
+
+# Build frontend bundle
 build-frontend:
     cd frontend && npm install && npm run build
+
+# Run tests
+test:
+    cargo test -p {{binary}}
+
+# --- Remote deploy (Raspberry Pi) ---
+
+# Build frontend then cross-compile backend (with embedded assets) for Pi
+build: build-frontend build-aarch64
+
+# Cross-compile backend for Raspberry Pi (release)
+build-aarch64:
+    cross build -p {{binary}} --target {{target_pi}} --release
 
 # Stop civlink on the Pi (- ignores error if no process is running)
 stop:
@@ -23,25 +43,14 @@ stop:
 # Full deploy: build, upload, stop, and run
 deploy args="": build stop
     scp {{target_dir}}/{{target_pi}}/release/{{binary}} {{remote}}:~/
-    ssh {{remote}} "RUST_LOG=civlink=debug ~/{{binary}} -c ~/{{config}} serve {{args}}"
+    ssh {{remote}} "RUST_LOG={{binary}}=info ~/{{binary}} --config ~/{{config}} serve {{args}}"
 
 # Test audio capture on the Pi
 test-audio: build stop
     scp {{target_dir}}/{{target_pi}}/release/{{binary}} {{remote}}:~/
-    ssh {{remote}} "~/{{binary}} -c ~/{{config}} test-audio"
+    ssh {{remote}} "~/{{binary}} --config ~/{{config}} test-audio"
 
 # Test radio event stream on the Pi
 test-events: build stop
     scp {{target_dir}}/{{target_pi}}/release/{{binary}} {{remote}}:~/
-    ssh {{remote}} "~/{{binary}} -c ~/{{config}} test-events"
-
-# --- Local commands ---
-
-# Build and run locally
-run-local args="": build-frontend
-    cargo build -p {{binary}}
-    {{target_dir}}/debug/{{binary}} -c {{config}} serve {{args}}
-
-# Run tests
-test:
-    cargo test -p {{binary}}
+    ssh {{remote}} "~/{{binary}} --config ~/{{config}} test-events"

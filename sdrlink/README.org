@@ -51,14 +51,14 @@ Copy the udev rules so non-root users can open the device:
 Build the frontend first so =rust-embed= picks up =frontend/dist=:
 
 #+begin_src bash
-  cd frontend && npm install && npm run build && cd ..
+  just build-frontend
   cargo build -p sdrlink
 #+end_src
 
 Run the test suite:
 
 #+begin_src bash
-  cargo test -p sdrlink
+  just test
 #+end_src
 
 ** Run
@@ -77,7 +77,7 @@ For a persistent local config, copy the example first:
 
 #+begin_src bash
   cp sdrlink.example.toml sdrlink.toml
-  cargo run --release -p sdrlink -- serve
+  cargo run --release -p sdrlink -- --config sdrlink.toml serve
 #+end_src
 
 Requires an AirspyHF+ plugged into USB. Open =http://localhost:8081/=
@@ -105,6 +105,23 @@ Vite dev with HMR, proxied to the backend on 8081:
 #+begin_src bash
   just frontend-dev
   # open http://localhost:5173
+#+end_src
+
+** Deployment to Raspberry Pi
+
+Cross-compile (release) and deploy to the Pi (hostname =shack=):
+
+#+begin_src bash
+  just deploy            # build + upload binary + config, stop old process, run
+#+end_src
+
+Or step-by-step:
+
+#+begin_src bash
+  just build-aarch64     # cross-compile release binary for aarch64
+  scp target/aarch64-unknown-linux-gnu/release/sdrlink shack:~/
+  scp sdrlink.example.toml shack:~/
+  ssh shack "RUST_LOG=sdrlink=info ~/sdrlink --config ~/sdrlink.example.toml serve"
 #+end_src
 
 ** User management
