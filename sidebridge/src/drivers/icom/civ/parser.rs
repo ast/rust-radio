@@ -3,6 +3,7 @@
 use std::convert::TryFrom;
 use thiserror::Error;
 
+use bytes::Bytes;
 use nom::{
     IResult,
     bytes::complete::{tag, take_until},
@@ -41,10 +42,10 @@ pub(crate) fn parse_bcd_u8(input: &[u8]) -> u8 {
     ((byte >> 4) * 10) + (byte & 0x0f)
 }
 
-fn parse_civ_command(cmd_byte: u8, data: &[u8]) -> CivCommand {
+fn parse_civ_command(cmd_byte: u8, data: Bytes) -> CivCommand {
     match cmd_byte {
         // Direct Commands
-        0x00 | 0x03 | 0x05 => CivCommand::TransceiverFreq(parse_bcd_to_u64(data)),
+        0x00 | 0x03 | 0x05 => CivCommand::TransceiverFreq(parse_bcd_to_u64(&data)),
         0x01 | 0x04 | 0x06 => {
             if data.len() >= 2 {
                 CivCommand::TransceiverMode {
@@ -60,7 +61,7 @@ fn parse_civ_command(cmd_byte: u8, data: &[u8]) -> CivCommand {
                 CivCommand::Unknown {
                     cmd: cmd_byte,
                     sub: None,
-                    data: data.to_vec(),
+                    data,
                 }
             }
         }
@@ -70,19 +71,19 @@ fn parse_civ_command(cmd_byte: u8, data: &[u8]) -> CivCommand {
         // Scope (cmd 0x27)
         0x27 if !data.is_empty() => {
             let sub_cmd = data[0];
-            let rest = &data[1..];
+            let rest = data.slice(1..);
             match sub_cmd {
-                0x00 => match scope::parse_scope_wave(rest) {
+                0x00 => match scope::parse_scope_wave(rest.clone()) {
                     Ok(wave) => CivCommand::ScopeWave(wave),
-                    Err(_) => CivCommand::ScopeRaw { sub_cmd, data: rest.to_vec() },
+                    Err(_) => CivCommand::ScopeRaw { sub_cmd, data: rest },
                 },
                 0x10 | 0x11 | 0x14 | 0x15 | 0x17 | 0x1a => {
-                    match scope::parse_scope_setting(sub_cmd, rest) {
+                    match scope::parse_scope_setting(sub_cmd, &rest) {
                         Ok(setting) => CivCommand::ScopeSetting(setting),
-                        Err(_) => CivCommand::ScopeRaw { sub_cmd, data: rest.to_vec() },
+                        Err(_) => CivCommand::ScopeRaw { sub_cmd, data: rest },
                     }
                 }
-                _ => CivCommand::ScopeRaw { sub_cmd, data: rest.to_vec() },
+                _ => CivCommand::ScopeRaw { sub_cmd, data: rest },
             }
         }
 
@@ -95,10 +96,10 @@ fn parse_civ_command(cmd_byte: u8, data: &[u8]) -> CivCommand {
                 let value = (hundreds as u16 * 100 + tens as u16 * 10 + ones as u16).min(255) as u8;
                 CivCommand::RfGain(value)
             }
-            _ => CivCommand::Unknown {
+            sub => CivCommand::Unknown {
                 cmd: 0x14,
-                sub: Some(data[0]),
-                data: data[1..].to_vec(),
+                sub: Some(sub),
+                data: data.slice(1..),
             },
         },
 
@@ -108,31 +109,33 @@ fn parse_civ_command(cmd_byte: u8, data: &[u8]) -> CivCommand {
             0x11 => CivCommand::RfPower(parse_bcd_u8(&data[1..])),
             0x12 => CivCommand::Swr(parse_bcd_u8(&data[1..])),
             0x13 => CivCommand::Alc(parse_bcd_u8(&data[1..])),
-            _ => CivCommand::Unknown {
+            sub => CivCommand::Unknown {
                 cmd: 0x15,
-                sub: Some(data[0]),
-                data: data[1..].to_vec(),
+                sub: Some(sub),
+                data: data.slice(1..),
             },
         },
 
         0x1c if !data.is_empty() => match data[0] {
             0x00 => CivCommand::SetPtt(data.get(1) == Some(&0x01)),
-            _ => CivCommand::Unknown {
+            sub => CivCommand::Unknown {
                 cmd: 0x1c,
-                sub: Some(data[0]),
-                data: data[1..].to_vec(),
+                sub: Some(sub),
+                data: data.slice(1..),
             },
         },
 
         _ => CivCommand::Unknown {
             cmd: cmd_byte,
             sub: None,
-            data: data.to_vec(),
+            data,
         },
     }
 }
 
-pub fn parse_frame(input: &[u8]) -> IResult<&[u8], CivFrame> {
+/// Parse frame header from a slice, returning (dest, src, cmd_byte) and the
+/// byte range within the input where the payload lives.
+fn parse_frame_offsets(input: &[u8]) -> IResult<&[u8], (u8, u8, u8, usize, usize)> {
     let (input, _) = tag(&[0xfe, 0xfe][..])(input)?;
     let (input, payload) = take_until(&[0xfd][..])(input)?;
     let (input, _) = tag(&[0xfd][..])(input)?;
@@ -141,23 +144,36 @@ pub fn parse_frame(input: &[u8]) -> IResult<&[u8], CivFrame> {
     let (rest, src) = u8(rest)?;
     let (rest, cmd_byte) = u8(rest)?;
 
-    let command = parse_civ_command(cmd_byte, rest);
+    // Compute the absolute byte range of `rest` within the original frame.
+    // Header = 2 (preamble) + 1 (dest) + 1 (src) + 1 (cmd) = 5 bytes.
+    let start = 5;
+    let end = start + rest.len();
+    Ok((input, (dest, src, cmd_byte, start, end)))
+}
 
-    Ok((input, CivFrame { dest, src, command }))
+impl TryFrom<Bytes> for CivFrame {
+    type Error = CivError;
+
+    fn try_from(value: Bytes) -> Result<Self, Self::Error> {
+        match parse_frame_offsets(&value) {
+            Ok((_remaining, (dest, src, cmd_byte, start, end))) => {
+                let data = value.slice(start..end);
+                let command = parse_civ_command(cmd_byte, data);
+                Ok(CivFrame { dest, src, command })
+            }
+            Err(nom::Err::Incomplete(_)) => Err(CivError::Incomplete),
+            Err(nom::Err::Error(e)) | Err(nom::Err::Failure(e)) => {
+                Err(CivError::ParserError(format!("{:?}", e.code)))
+            }
+        }
+    }
 }
 
 impl TryFrom<&[u8]> for CivFrame {
     type Error = CivError;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        match parse_frame(value) {
-            Ok((_remaining, frame)) => Ok(frame),
-            Err(nom::Err::Incomplete(_)) => Err(CivError::Incomplete),
-            Err(nom::Err::Error(e)) | Err(nom::Err::Failure(e)) => {
-                // Convert nom error to a string for the thiserror variant
-                Err(CivError::ParserError(format!("{:?}", e.code)))
-            }
-        }
+        CivFrame::try_from(Bytes::copy_from_slice(value))
     }
 }
 

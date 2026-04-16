@@ -40,8 +40,9 @@ impl Decoder for CivCodec {
             // split_to is O(1) - it doesn't copy data, just adjusts pointers
             let frame_bytes = src.split_to(end_pos + 1).freeze();
 
-            // 2. Use your TryFrom implementation!
-            let frame = CivFrame::try_from(&frame_bytes[start_pos..])?;
+            // Zero-copy: thread the Bytes through parsing so Unknown/ScopeRaw
+            // payloads and scope bins are refcounted subslices of the frame.
+            let frame = CivFrame::try_from(frame_bytes)?;
             return Ok(Some(frame));
         }
 

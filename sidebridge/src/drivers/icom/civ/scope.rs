@@ -1,5 +1,6 @@
 // Copyright (c) SM6WJM 2026
 
+use bytes::Bytes;
 use thiserror::Error;
 
 use arrayvec::ArrayVec;
@@ -56,7 +57,7 @@ pub struct ScopeWaveData {
     pub out_of_range: Option<bool>,
     /// Waveform amplitude bins (0-160 range).
     /// Empty in USB header division, present otherwise.
-    pub bins: Vec<u8>,
+    pub bins: Bytes,
 }
 
 /// Parsed scope setting from CI-V command 0x27 sub 0x10-0x1E.
@@ -96,7 +97,7 @@ pub enum ScopeParseError {
 ///
 /// The input `data` starts at field 1 (a fixed 0x00 byte), followed by
 /// the division byte (field 2) and max_division (field 3).
-pub fn parse_scope_wave(data: &[u8]) -> Result<ScopeWaveData, ScopeParseError> {
+pub fn parse_scope_wave(data: Bytes) -> Result<ScopeWaveData, ScopeParseError> {
     // Field 1 is a fixed 0x00 byte — skip it
     if data.len() < 3 {
         return Err(ScopeParseError::InsufficientData { need: 3, got: data.len() });
@@ -115,22 +116,21 @@ pub fn parse_scope_wave(data: &[u8]) -> Result<ScopeWaveData, ScopeParseError> {
         }
 
         let mode = scope_mode_from_byte(data[3])?;
-        let rest = &data[4..];
-
-        let (freq_info, after_freq) = parse_freq_info(mode, rest)?;
+        let (freq_info, freq_len) = parse_freq_info(mode, &data[4..])?;
+        let after_freq = 4 + freq_len;
 
         // Out-of-range byte
-        if after_freq.is_empty() {
+        if data.len() <= after_freq {
             return Err(ScopeParseError::InsufficientData {
-                need: data.len() + 1,
+                need: after_freq + 1,
                 got: data.len(),
             });
         }
-        let out_of_range = after_freq[0] != 0x00;
-        let bins_data = &after_freq[1..];
+        let out_of_range = data[after_freq] != 0x00;
+        let bins_start = after_freq + 1;
 
         // WLAN single frame includes bins; USB header does not
-        let bins = if is_wlan { bins_data.to_vec() } else { Vec::new() };
+        let bins = if is_wlan { data.slice(bins_start..) } else { Bytes::new() };
 
         Ok(ScopeWaveData {
             division,
@@ -142,7 +142,7 @@ pub fn parse_scope_wave(data: &[u8]) -> Result<ScopeWaveData, ScopeParseError> {
         })
     } else {
         // Data division: skip fixed(1) + div(1) + max_div(1), rest is bins
-        let bins = data[3..].to_vec();
+        let bins = data.slice(3..);
 
         Ok(ScopeWaveData {
             division,
@@ -156,11 +156,11 @@ pub fn parse_scope_wave(data: &[u8]) -> Result<ScopeWaveData, ScopeParseError> {
 }
 
 /// Parse frequency info from the header based on scope mode.
-/// Returns the parsed info and the remaining bytes after frequency data.
+/// Returns the parsed info and the number of bytes consumed.
 fn parse_freq_info(
     mode: ScopeMode,
     data: &[u8],
-) -> Result<(ScopeFreqInfo, &[u8]), ScopeParseError> {
+) -> Result<(ScopeFreqInfo, usize), ScopeParseError> {
     match mode {
         ScopeMode::Center => {
             // 5 bytes center frequency + 5 bytes span = 10 bytes
@@ -169,10 +169,7 @@ fn parse_freq_info(
             }
             let center_hz = parse_bcd_to_u64(&data[..5]);
             let span_hz = parse_bcd_to_u64(&data[5..10]);
-            Ok((
-                ScopeFreqInfo::Center { center_hz, span_hz },
-                &data[10..],
-            ))
+            Ok((ScopeFreqInfo::Center { center_hz, span_hz }, 10))
         }
         ScopeMode::Fixed => {
             // 5 bytes lower edge + 5 bytes upper edge = 10 bytes
@@ -181,10 +178,7 @@ fn parse_freq_info(
             }
             let lower_edge_hz = parse_bcd_to_u64(&data[..5]);
             let upper_edge_hz = parse_bcd_to_u64(&data[5..10]);
-            Ok((
-                ScopeFreqInfo::Fixed { lower_edge_hz, upper_edge_hz },
-                &data[10..],
-            ))
+            Ok((ScopeFreqInfo::Fixed { lower_edge_hz, upper_edge_hz }, 10))
         }
     }
 }
@@ -257,7 +251,7 @@ fn parse_bcd_u8(byte: u8) -> u8 {
 /// with header + all bins.
 pub struct ScopeAssembler {
     header: Option<ScopeWaveData>,
-    bin_slots: Vec<Vec<u8>>,
+    bin_slots: Vec<Bytes>,
     expected_divisions: u8,
     received_mask: u16,
 }
@@ -279,7 +273,7 @@ impl ScopeAssembler {
 
         // WLAN single-frame: return immediately
         if max_div == 1 && data.division == 1 {
-            return self.build_frame(&data, data.bins.clone());
+            return self.build_frame(&data, &data.bins[..]);
         }
 
         // USB multi-division
@@ -287,7 +281,7 @@ impl ScopeAssembler {
             // New sweep — discard any partial frame
             self.reset();
             self.expected_divisions = max_div;
-            self.bin_slots = vec![Vec::new(); max_div as usize];
+            self.bin_slots = vec![Bytes::new(); max_div as usize];
             self.header = Some(data);
             self.received_mask = 1; // bit 0 = division 1
             return None;
@@ -309,10 +303,14 @@ impl ScopeAssembler {
         let all_mask = (1u16 << max_div) - 1;
         if self.received_mask == all_mask {
             // Assemble bins in division order (skip division 1 which has no bins)
-            let bins: Vec<u8> = self.bin_slots[1..].iter().flat_map(|s| s.iter().copied()).collect();
+            let total: usize = self.bin_slots[1..].iter().map(|b| b.len()).sum();
+            let mut bins: Vec<u8> = Vec::with_capacity(total);
+            for slot in &self.bin_slots[1..] {
+                bins.extend_from_slice(slot);
+            }
             let header = self.header.take().unwrap();
             self.reset();
-            return self.build_frame(&header, bins);
+            return self.build_frame(&header, &bins);
         }
 
         None
@@ -326,7 +324,7 @@ impl ScopeAssembler {
         self.received_mask = 0;
     }
 
-    fn build_frame(&self, header: &ScopeWaveData, bins: Vec<u8>) -> Option<ScopeFrame> {
+    fn build_frame(&self, header: &ScopeWaveData, bins: &[u8]) -> Option<ScopeFrame> {
         let freq_info = header.freq_info.as_ref()?;
         let freq = match freq_info {
             ScopeFreqInfo::Center { center_hz, span_hz } => ScopeFreq::Center {
@@ -431,7 +429,7 @@ mod tests {
         let mut data = make_center_header(1, 1, freq, span, false);
         data.extend_from_slice(&bins);
 
-        let result = parse_scope_wave(&data).unwrap();
+        let result = parse_scope_wave(Bytes::copy_from_slice(&data)).unwrap();
         assert_eq!(result.division, 1);
         assert_eq!(result.max_division, 1);
         assert_eq!(result.mode, Some(ScopeMode::Center));
@@ -450,7 +448,7 @@ mod tests {
         let span = 50_000u64;
 
         let data = make_center_header(1, 11, freq, span, false);
-        let result = parse_scope_wave(&data).unwrap();
+        let result = parse_scope_wave(Bytes::copy_from_slice(&data)).unwrap();
 
         assert_eq!(result.division, 1);
         assert_eq!(result.max_division, 11);
@@ -468,7 +466,7 @@ mod tests {
         let bins: Vec<u8> = vec![42; 48];
         let data = make_data_division(5, 11, &bins);
 
-        let result = parse_scope_wave(&data).unwrap();
+        let result = parse_scope_wave(Bytes::copy_from_slice(&data)).unwrap();
         assert_eq!(result.division, 5);
         assert_eq!(result.max_division, 11);
         assert_eq!(result.mode, None);
@@ -493,7 +491,7 @@ mod tests {
         let bins: Vec<u8> = vec![80; SCOPE_BINS];
         data.extend_from_slice(&bins);
 
-        let result = parse_scope_wave(&data).unwrap();
+        let result = parse_scope_wave(Bytes::copy_from_slice(&data)).unwrap();
         assert_eq!(result.mode, Some(ScopeMode::Fixed));
         assert_eq!(
             result.freq_info,
@@ -505,13 +503,13 @@ mod tests {
     #[test]
     fn test_parse_wave_out_of_range() {
         let data = make_center_header(1, 11, 14_200_000, 100_000, true);
-        let result = parse_scope_wave(&data).unwrap();
+        let result = parse_scope_wave(Bytes::copy_from_slice(&data)).unwrap();
         assert_eq!(result.out_of_range, Some(true));
     }
 
     #[test]
     fn test_parse_wave_insufficient_data() {
-        let result = parse_scope_wave(&[0x01]);
+        let result = parse_scope_wave(Bytes::copy_from_slice(&[0x01]));
         assert!(result.is_err());
     }
 
@@ -525,7 +523,7 @@ mod tests {
         // Enough padding for the parser to try
         data.extend_from_slice(&[0; 20]);
 
-        let result = parse_scope_wave(&data);
+        let result = parse_scope_wave(Bytes::copy_from_slice(&data));
         assert!(matches!(result, Err(ScopeParseError::InvalidMode(0x05))));
     }
 
@@ -601,7 +599,7 @@ mod tests {
         let mut data = make_center_header(1, 1, freq, span, false);
         data.extend_from_slice(&bins);
 
-        let wave = parse_scope_wave(&data).unwrap();
+        let wave = parse_scope_wave(Bytes::copy_from_slice(&data)).unwrap();
         let frame = asm.push(wave).expect("should produce frame");
 
         assert!(matches!(frame.freq, ScopeFreq::Center { center_hz, span_hz } if center_hz == freq && span_hz == span));
@@ -616,7 +614,7 @@ mod tests {
 
         // Division 1: header
         let header_data = make_center_header(1, 11, freq, span, false);
-        let wave = parse_scope_wave(&header_data).unwrap();
+        let wave = parse_scope_wave(Bytes::copy_from_slice(&header_data)).unwrap();
         assert!(asm.push(wave).is_none());
 
         // Divisions 2-10: bins
@@ -624,14 +622,14 @@ mod tests {
         for div in 2..=10 {
             let bins: Vec<u8> = vec![div as u8; bins_per_div];
             let data = make_data_division(div, 11, &bins);
-            let wave = parse_scope_wave(&data).unwrap();
+            let wave = parse_scope_wave(Bytes::copy_from_slice(&data)).unwrap();
             assert!(asm.push(wave).is_none());
         }
 
         // Division 11: last bins — should complete
         let last_bins: Vec<u8> = vec![11; bins_per_div];
         let data = make_data_division(11, 11, &last_bins);
-        let wave = parse_scope_wave(&data).unwrap();
+        let wave = parse_scope_wave(Bytes::copy_from_slice(&data)).unwrap();
         let frame = asm.push(wave).expect("should produce frame on last division");
 
         assert!(matches!(frame.freq, ScopeFreq::Center { center_hz, span_hz } if center_hz == freq && span_hz == span));
@@ -648,23 +646,23 @@ mod tests {
 
         // Start first sweep: divisions 1-5
         let header = make_center_header(1, 11, freq1, span, false);
-        asm.push(parse_scope_wave(&header).unwrap());
+        asm.push(parse_scope_wave(Bytes::copy_from_slice(&header)).unwrap());
         for div in 2..=5 {
             let data = make_data_division(div, 11, &vec![div as u8; 48]);
-            asm.push(parse_scope_wave(&data).unwrap());
+            asm.push(parse_scope_wave(Bytes::copy_from_slice(&data)).unwrap());
         }
 
         // New sweep starts — should discard partial
         let header2 = make_center_header(1, 11, freq2, span, false);
-        asm.push(parse_scope_wave(&header2).unwrap());
+        asm.push(parse_scope_wave(Bytes::copy_from_slice(&header2)).unwrap());
 
         // Complete the second sweep
         for div in 2..=10 {
             let data = make_data_division(div, 11, &vec![div as u8; 48]);
-            assert!(asm.push(parse_scope_wave(&data).unwrap()).is_none());
+            assert!(asm.push(parse_scope_wave(Bytes::copy_from_slice(&data)).unwrap()).is_none());
         }
         let data = make_data_division(11, 11, &vec![11; 48]);
-        let frame = asm.push(parse_scope_wave(&data).unwrap()).expect("should complete second sweep");
+        let frame = asm.push(parse_scope_wave(Bytes::copy_from_slice(&data)).unwrap()).expect("should complete second sweep");
 
         // Should have freq2, not freq1
         assert!(matches!(frame.freq, ScopeFreq::Center { center_hz, .. } if center_hz == freq2));
@@ -687,7 +685,7 @@ mod tests {
         let bins: Vec<u8> = vec![80; SCOPE_BINS];
         data.extend_from_slice(&bins);
 
-        let wave = parse_scope_wave(&data).unwrap();
+        let wave = parse_scope_wave(Bytes::copy_from_slice(&data)).unwrap();
         let frame = asm.push(wave).expect("should produce frame");
 
         assert!(matches!(frame.freq, ScopeFreq::Fixed { lower_hz, upper_hz } if lower_hz == lower && upper_hz == upper));
@@ -698,7 +696,7 @@ mod tests {
     fn test_assembler_data_without_header_ignored() {
         let mut asm = ScopeAssembler::new();
         let data = make_data_division(5, 11, &vec![42; 48]);
-        let wave = parse_scope_wave(&data).unwrap();
+        let wave = parse_scope_wave(Bytes::copy_from_slice(&data)).unwrap();
         assert!(asm.push(wave).is_none());
     }
 }

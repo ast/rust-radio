@@ -21,14 +21,14 @@ pub enum CivCommand {
     ScopeSetting(ScopeSetting),     // 0x27 0x10-0x1E — parsed scope setting
     ScopeRaw {                      // 0x27 — fallback for unknown/failed parse
         sub_cmd: u8,
-        data: Vec<u8>,
+        data: Bytes,
     },
     Ok,      // 0xfb (ACK)
     NotGood, // 0xfa (NAK)
     Unknown {
         cmd: u8,
         sub: Option<u8>,
-        data: Vec<u8>,
+        data: Bytes,
     },
 }
 
