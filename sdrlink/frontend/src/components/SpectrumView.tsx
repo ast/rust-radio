@@ -150,6 +150,24 @@ const SpectrumView: Component<Props> = (props) => {
     );
   };
 
+  const onWheel = (e: WheelEvent) => {
+    e.preventDefault();
+    const h = hello();
+    const vp = viewport();
+    const d = demod();
+    if (!h || !vp || !d) return;
+    const span = vp.stopHz - vp.startHz;
+    const base = span / 200;
+    const coarse = e.shiftKey ? 10 : 1;
+    const dir = e.deltaY < 0 ? 1 : -1;
+    const step = base * coarse * dir;
+    const halfBand = h.samplerate / 2;
+    const next = Math.max(-halfBand, Math.min(halfBand, d.offset_hz + step));
+    if (next === d.offset_hz) return;
+    setDemod({ ...d, offset_hz: next });
+    send({ type: "SetDemodOffset", payload: { offset_hz: next } });
+  };
+
   const onContextMenu = (e: MouseEvent) => {
     e.preventDefault();
     const prev = history.pop();
@@ -306,6 +324,7 @@ const SpectrumView: Component<Props> = (props) => {
           height={1024}
           class="waterfall"
           onMouseDown={onMouseDown}
+          onWheel={onWheel}
           onContextMenu={onContextMenu}
           onDblClick={onDoubleClick}
         />
@@ -415,6 +434,7 @@ const SpectrumView: Component<Props> = (props) => {
             }}
           >
             <option value="fm">FM</option>
+            <option value="nfm">NFM</option>
             <option value="usb">USB</option>
             <option value="lsb">LSB</option>
           </select>

@@ -1,13 +1,17 @@
+pub mod biquad;
 pub mod deemphasis;
 pub mod design;
 pub mod fir;
 pub mod fm_demod;
+pub mod noise_squelch;
 pub mod ringbuffer;
 pub mod rotate;
 pub mod traits;
 
+pub use biquad::{Biquad, Q_BUTTERWORTH};
 pub use deemphasis::Deemphasis;
 pub use fm_demod::FmDemod;
+pub use noise_squelch::NoiseSquelch;
 
 // Trait re-exports
 pub use traits::{Decimator, DelayLine, Filter};

@@ -1,10 +1,12 @@
 pub mod fm;
+pub mod nfm;
 pub mod ssb;
 
 use num_complex::Complex32;
 use serde::{Deserialize, Serialize};
 
 pub use fm::FmDemodChain;
+pub use nfm::NfmDemodChain;
 pub use ssb::SsbDemodChain;
 
 /// All demods take rotated IQ at the capture rate (768k) and emit audio
@@ -20,6 +22,7 @@ pub trait Demod: Send {
 #[serde(rename_all = "lowercase")]
 pub enum Mode {
     Fm,
+    Nfm,
     Usb,
     Lsb,
 }
@@ -28,6 +31,7 @@ impl Mode {
     pub fn as_str(self) -> &'static str {
         match self {
             Mode::Fm => "fm",
+            Mode::Nfm => "nfm",
             Mode::Usb => "usb",
             Mode::Lsb => "lsb",
         }
@@ -44,6 +48,7 @@ pub const AUDIO_RATE: u32 = 48_000;
 pub fn build(mode: Mode) -> Box<dyn Demod> {
     match mode {
         Mode::Fm => Box::new(FmDemodChain::new()),
+        Mode::Nfm => Box::new(NfmDemodChain::new()),
         Mode::Usb => Box::new(SsbDemodChain::new(filters::design::SsbSide::Upper, 2_700.0)),
         Mode::Lsb => Box::new(SsbDemodChain::new(filters::design::SsbSide::Lower, 2_700.0)),
     }
