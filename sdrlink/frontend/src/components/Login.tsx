@@ -35,22 +35,24 @@ const Login: Component<Props> = (props) => {
 
   return (
     <form class="login-form" onSubmit={submit}>
-      <h1>sdrlink</h1>
+      <h1 class="login-form__title">sdrlink</h1>
       {error() && <div class="login-error">{error()}</div>}
       <input
+        class="input"
         placeholder="username"
         value={username()}
         onInput={(e) => setUsername(e.currentTarget.value)}
         autocomplete="username"
       />
       <input
+        class="input"
         type="password"
         placeholder="password"
         value={password()}
         onInput={(e) => setPassword(e.currentTarget.value)}
         autocomplete="current-password"
       />
-      <button type="submit" disabled={busy()}>
+      <button class="btn btn--primary" type="submit" disabled={busy()}>
         {busy() ? "…" : "login"}
       </button>
     </form>

@@ -1,4 +1,4 @@
-import { Component, createSignal, onCleanup, onMount } from "solid-js";
+import { Component, createSignal, onCleanup, onMount, Show } from "solid-js";
 import {
   COLORMAP_NAMES,
   ColormapName,
@@ -33,6 +33,20 @@ interface Viewport {
   stopHz: number;
 }
 
+type LinkState = "connecting" | "connected" | "disconnected" | "error";
+type DotKind = "idle" | "ok" | "warn" | "bad";
+
+interface PeerStats {
+  path: "direct" | "stun" | "turn" | "—";
+  rttMs: number | null;
+  lossPct: number | null;
+  jitterMs: number | null;
+}
+
+const THEMES = ["cyan", "phosphor", "amber"] as const;
+type Theme = (typeof THEMES)[number];
+const THEME_KEY = "sdrlink.theme";
+
 const fullViewport = (h: Hello): Viewport => ({
   startHz: h.center_hz - h.samplerate / 2,
   stopHz: h.center_hz + h.samplerate / 2,
@@ -41,30 +55,89 @@ const fullViewport = (h: Hello): Viewport => ({
 const clampViewport = (vp: Viewport, h: Hello): Viewport => {
   const lo = h.center_hz - h.samplerate / 2;
   const hi = h.center_hz + h.samplerate / 2;
-  let start = Math.max(lo, Math.min(hi, vp.startHz));
-  let stop = Math.max(lo, Math.min(hi, vp.stopHz));
+  const start = Math.max(lo, Math.min(hi, vp.startHz));
+  const stop = Math.max(lo, Math.min(hi, vp.stopHz));
   if (stop - start < 1) return fullViewport(h);
   return { startHz: start, stopHz: stop };
+};
+
+const linkDot: Record<LinkState, DotKind> = {
+  connecting: "warn",
+  connected: "ok",
+  disconnected: "bad",
+  error: "bad",
+};
+
+const audioDot = (state: string): DotKind => {
+  if (state === "connected" || state === "completed") return "ok";
+  if (state === "failed" || state === "closed" || state === "disconnected") return "bad";
+  if (state === "checking" || state === "negotiating" || state === "new") return "warn";
+  return "idle";
+};
+
+const analyseStats = (report: RTCStatsReport): Partial<PeerStats> => {
+  const out: Partial<PeerStats> = {};
+  let pair: any = null;
+  report.forEach((s: any) => {
+    if (s.type === "candidate-pair" && s.nominated && s.state === "succeeded") pair = s;
+  });
+  if (pair) {
+    const local: any = report.get(pair.localCandidateId);
+    const remote: any = report.get(pair.remoteCandidateId);
+    const lt = local?.candidateType;
+    const rt = remote?.candidateType;
+    if (lt === "relay" || rt === "relay") out.path = "turn";
+    else if (lt === "srflx" || rt === "srflx" || lt === "prflx" || rt === "prflx") out.path = "stun";
+    else if (lt === "host" && rt === "host") out.path = "direct";
+    if (typeof pair.currentRoundTripTime === "number") out.rttMs = pair.currentRoundTripTime * 1000;
+  }
+  report.forEach((s: any) => {
+    if (s.type === "inbound-rtp" && s.kind === "audio") {
+      if (typeof s.jitter === "number") out.jitterMs = s.jitter * 1000;
+      const lost = s.packetsLost ?? 0;
+      const recv = s.packetsReceived ?? 0;
+      if (lost + recv > 0) out.lossPct = (lost / (lost + recv)) * 100;
+    }
+  });
+  return out;
 };
 
 const SpectrumView: Component<Props> = (props) => {
   const [hello, setHello] = createSignal<Hello | null>(null);
   const [viewport, setViewport] = createSignal<Viewport | null>(null);
   const [frames, setFrames] = createSignal(0);
-  const [status, setStatus] = createSignal("connecting…");
-  const [audioStatus, setAudioStatus] = createSignal("idle");
+  const [link, setLink] = createSignal<LinkState>("connecting");
+  const [audioState, setAudioState] = createSignal("idle");
+  const [peer, setPeer] = createSignal<PeerStats>({
+    path: "—",
+    rttMs: null,
+    lossPct: null,
+    jitterMs: null,
+  });
   const [cmap, setCmap] = createSignal<ColormapName>(DEFAULT_COLORMAP);
+  const [theme, setTheme] = createSignal<Theme>(
+    (localStorage.getItem(THEME_KEY) as Theme) || "cyan",
+  );
   const [selection, setSelection] = createSignal<{ x0: number; x1: number } | null>(null);
   const [demod, setDemod] = createSignal<DemodState | null>(null);
   const [playing, setPlaying] = createSignal(false);
   const [muted, setMuted] = createSignal(false);
+
   let canvas: HTMLCanvasElement | undefined;
   let audioEl: HTMLAudioElement | undefined;
   let ws: WebSocket | undefined;
   let waterfall: Waterfall | undefined;
   let pc: RTCPeerConnection | undefined;
+  let statsTimer: number | undefined;
   let history: Viewport[] = [];
   let dragOrigin: { clientX: number; rectLeft: number; rectWidth: number } | null = null;
+
+  const applyTheme = (t: Theme) => {
+    setTheme(t);
+    localStorage.setItem(THEME_KEY, t);
+    if (t === "cyan") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", t);
+  };
 
   const send = (msg: unknown) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -101,11 +174,7 @@ const SpectrumView: Component<Props> = (props) => {
   const onMouseDown = (e: MouseEvent) => {
     if (e.button !== 0 || !canvas) return;
     const rect = canvas.getBoundingClientRect();
-    dragOrigin = {
-      clientX: e.clientX,
-      rectLeft: rect.left,
-      rectWidth: rect.width,
-    };
+    dragOrigin = { clientX: e.clientX, rectLeft: rect.left, rectWidth: rect.width };
     const x = e.clientX - rect.left;
     setSelection({ x0: x, x1: x });
   };
@@ -130,7 +199,6 @@ const SpectrumView: Component<Props> = (props) => {
     const x = Math.max(0, Math.min(origin.rectWidth, e.clientX - origin.rectLeft));
     const xMin = Math.min(sel.x0, x);
     const xMax = Math.max(sel.x0, x);
-    // Treat tiny drags as a click — tune the demod instead of zooming.
     if (xMax - xMin < 4) {
       const span = vp.stopHz - vp.startHz;
       const clickHz = vp.startHz + ((xMin + xMax) / 2 / origin.rectWidth) * span;
@@ -190,7 +258,7 @@ const SpectrumView: Component<Props> = (props) => {
   };
 
   const startWebrtc = async () => {
-    setAudioStatus("negotiating");
+    setAudioState("negotiating");
     pc = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
@@ -199,24 +267,18 @@ const SpectrumView: Component<Props> = (props) => {
       if (audioEl && e.streams[0]) {
         audioEl.srcObject = e.streams[0];
         audioEl.play().catch((err) => {
-          setAudioStatus(`autoplay blocked: click ▶ (${err.message})`);
+          setAudioState(`autoplay blocked (${err.message})`);
         });
       }
     };
     pc.onconnectionstatechange = () => {
-      if (pc) setAudioStatus(pc.connectionState);
+      if (pc) setAudioState(pc.connectionState);
     };
     pc.onicecandidate = (e) => {
-      if (e.candidate) {
-        send({ type: "IceCandidate", payload: e.candidate.toJSON() });
-      }
+      if (e.candidate) send({ type: "IceCandidate", payload: e.candidate.toJSON() });
     };
 
-    // Unreliable/unordered data channel for spectrum frames.
-    const dc = pc.createDataChannel("spectrum", {
-      ordered: false,
-      maxRetransmits: 0,
-    });
+    const dc = pc.createDataChannel("spectrum", { ordered: false, maxRetransmits: 0 });
     dc.binaryType = "arraybuffer";
     dc.onmessage = (e) => {
       setFrames((n) => n + 1);
@@ -227,6 +289,16 @@ const SpectrumView: Component<Props> = (props) => {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     send({ type: "Offer", payload: offer });
+
+    statsTimer = window.setInterval(async () => {
+      if (!pc) return;
+      try {
+        const report = await pc.getStats();
+        setPeer((prev) => ({ ...prev, ...analyseStats(report) }));
+      } catch {
+        /* ignore */
+      }
+    }, 1000);
   };
 
   onMount(() => {
@@ -236,9 +308,9 @@ const SpectrumView: Component<Props> = (props) => {
     const url = `${proto}//${location.host}/api/ws?token=${encodeURIComponent(props.token)}`;
     ws = new WebSocket(url);
 
-    ws.onopen = () => setStatus("connected");
-    ws.onclose = () => setStatus("disconnected");
-    ws.onerror = () => setStatus("error");
+    ws.onopen = () => setLink("connected");
+    ws.onclose = () => setLink("disconnected");
+    ws.onerror = () => setLink("error");
 
     ws.onmessage = async (e) => {
       const msg = JSON.parse(e.data);
@@ -297,25 +369,71 @@ const SpectrumView: Component<Props> = (props) => {
       resizeObserver.disconnect();
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
+      if (statsTimer) clearInterval(statsTimer);
       pc?.close();
       ws?.close();
     });
   });
 
+  const fmtMs = (v: number | null) => (v == null ? "—" : `${v.toFixed(0)}ms`);
+  const fmtPct = (v: number | null) => (v == null ? "—" : `${v.toFixed(2)}%`);
+
   return (
     <div class="spectrum-view">
       <div class="topbar">
-        <span>status: {status()}</span>
-        <span>audio: {audioStatus()}</span>
-        <span>frames: {frames()}</span>
-        {hello() && (
-          <span>
-            {(hello()!.center_hz / 1e6).toFixed(3)} MHz ·{" "}
-            {(hello()!.samplerate / 1000).toFixed(0)} kHz ·{" "}
-            {hello()!.fft_len} bins @ {hello()!.fft_rate_hz} Hz
+        <div class="stat stat--link">
+          <span class="stat__label">link</span>
+          <span class="stat__value">
+            <span class={`dot dot--${linkDot[link()]}`} /> {link()}
           </span>
-        )}
-        <button onClick={props.onLogout}>logout</button>
+        </div>
+
+        <div class="stat stat--audio">
+          <span class="stat__label">audio</span>
+          <span class="stat__value">
+            <span class={`dot dot--${audioDot(audioState())}`} /> {audioState()}
+            <span class="sep">·</span>
+            {peer().path}
+            <Show when={peer().rttMs != null}>
+              <span class="sep">·</span>
+              rtt {fmtMs(peer().rttMs)}
+            </Show>
+            <Show when={peer().lossPct != null}>
+              <span class="sep">·</span>
+              loss {fmtPct(peer().lossPct)}
+            </Show>
+            <Show when={peer().jitterMs != null}>
+              <span class="sep">·</span>
+              jit {fmtMs(peer().jitterMs)}
+            </Show>
+          </span>
+        </div>
+
+        <Show when={hello()}>
+          {(h) => (
+            <div class="stat stat--rx">
+              <span class="stat__label">rx</span>
+              <span class="stat__value">
+                {(h().center_hz / 1e6).toFixed(3)} MHz
+                <span class="sep">·</span>
+                {(h().samplerate / 1000).toFixed(0)} kHz
+                <span class="sep">·</span>
+                {h().fft_len} bins
+                <span class="sep">@</span>
+                {h().fft_rate_hz} Hz
+              </span>
+            </div>
+          )}
+        </Show>
+
+        <div class="stat stat--frames">
+          <span class="stat__label">frames</span>
+          <span class="stat__value">{frames().toLocaleString()}</span>
+        </div>
+
+        <div class="topbar__right">
+          <button class="btn" onClick={props.onLogout}>logout</button>
+        </div>
       </div>
 
       <div class="waterfall-wrap">
@@ -328,23 +446,27 @@ const SpectrumView: Component<Props> = (props) => {
           onContextMenu={onContextMenu}
           onDblClick={onDoubleClick}
         />
-        {selection() && (
-          <div
-            class="selection-rect"
-            style={{
-              left: `${Math.min(selection()!.x0, selection()!.x1)}px`,
-              width: `${Math.abs(selection()!.x1 - selection()!.x0)}px`,
-            }}
-          />
-        )}
-        {viewport() && (
-          <div class="viewport-overlay">
-            {(viewport()!.startHz / 1e6).toFixed(3)} –{" "}
-            {(viewport()!.stopHz / 1e6).toFixed(3)} MHz · span{" "}
-            {((viewport()!.stopHz - viewport()!.startHz) / 1e3).toFixed(1)} kHz
-            {history.length > 0 && ` · ${history.length} back`}
-          </div>
-        )}
+        <Show when={selection()}>
+          {(s) => (
+            <div
+              class="selection-rect"
+              style={{
+                left: `${Math.min(s().x0, s().x1)}px`,
+                width: `${Math.abs(s().x1 - s().x0)}px`,
+              }}
+            />
+          )}
+        </Show>
+        <Show when={viewport()}>
+          {(vp) => (
+            <div class="overlay overlay--viewport">
+              {(vp().startHz / 1e6).toFixed(3)} – {(vp().stopHz / 1e6).toFixed(3)} MHz
+              <span class="sep">·</span>
+              span {((vp().stopHz - vp().startHz) / 1e3).toFixed(1)} kHz
+              {history.length > 0 && ` · ${history.length} back`}
+            </div>
+          )}
+        </Show>
         {(() => {
           const h = hello();
           const vp = viewport();
@@ -360,21 +482,19 @@ const SpectrumView: Component<Props> = (props) => {
           const centerPct = ((demodHz - vp.startHz) / span) * 100;
           return (
             <>
-              <div
-                class="filter-band"
-                style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
-              />
+              <div class="filter-band" style={{ left: `${leftPct}%`, width: `${widthPct}%` }} />
               <div class="filter-center" style={{ left: `${centerPct}%` }} />
             </>
           );
         })()}
-        {demod() && hello() && (
-          <div class="demod-strip">
-            demod {((hello()!.center_hz + demod()!.offset_hz) / 1e6).toFixed(3)} MHz ·{" "}
+        <Show when={demod() && hello()}>
+          <div class="overlay overlay--demod">
+            demod {((hello()!.center_hz + demod()!.offset_hz) / 1e6).toFixed(3)} MHz
+            <span class="sep">·</span>
             {demod()!.mode.toUpperCase()} {(demod()!.filter_low_hz / 1e3).toFixed(1)}…
             {(demod()!.filter_high_hz / 1e3).toFixed(1)} kHz
           </div>
-        )}
+        </Show>
       </div>
 
       <audio
@@ -387,73 +507,100 @@ const SpectrumView: Component<Props> = (props) => {
       />
 
       <div class="controls">
-        <fieldset>
-          <legend>audio</legend>
-          <button
-            type="button"
-            onClick={() => {
-              if (!audioEl) return;
-              if (audioEl.paused) audioEl.play().catch(() => {});
-              else audioEl.pause();
-            }}
-            title={playing() ? "pause" : "play"}
-          >
-            {playing() ? "⏸" : "▶"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (!audioEl) return;
-              audioEl.muted = !audioEl.muted;
-            }}
-            title={muted() ? "unmute" : "mute"}
-          >
-            {muted() ? "🔇" : "🔊"}
-          </button>
-        </fieldset>
-        <fieldset>
-          <legend>tuning</legend>
-          {hello() && (
-            <FrequencyTuner
-              hz={hello()!.center_hz}
-              onTune={(hz) => {
-                // Optimistic local update; server echoes CenterChanged.
-                setHello({ ...hello()!, center_hz: hz });
-                send({ type: "SetCenter", payload: { hz } });
+        <div class="group">
+          <div class="group__label">audio</div>
+          <div class="group__body">
+            <button
+              class="btn"
+              type="button"
+              onClick={() => {
+                if (!audioEl) return;
+                if (audioEl.paused) audioEl.play().catch(() => {});
+                else audioEl.pause();
               }}
-            />
-          )}
-        </fieldset>
-        <fieldset>
-          <legend>demod</legend>
-          <select
-            value={demod()?.mode ?? "fm"}
-            onChange={(e) => {
-              const mode = e.currentTarget.value;
-              send({ type: "SetDemodMode", payload: { mode } });
-            }}
-          >
-            <option value="fm">FM</option>
-            <option value="nfm">NFM</option>
-            <option value="usb">USB</option>
-            <option value="lsb">LSB</option>
-          </select>
-        </fieldset>
-        <fieldset>
-          <legend>colormap</legend>
-          <select
-            value={cmap()}
-            onChange={(e) => {
-              const name = e.currentTarget.value as ColormapName;
-              setCmap(name);
-              waterfall?.setColormap(colormap(name));
-            }}
-          >
-            {COLORMAP_NAMES.map((n) => (
-              <option value={n}>{n}</option>
-            ))}
-          </select>
-        </fieldset>
+              title={playing() ? "pause" : "play"}
+            >
+              {playing() ? "⏸" : "▶"}
+            </button>
+            <button
+              class="btn"
+              type="button"
+              onClick={() => audioEl && (audioEl.muted = !audioEl.muted)}
+              title={muted() ? "unmute" : "mute"}
+            >
+              {muted() ? "🔇" : "🔊"}
+            </button>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="group__label">tuning</div>
+          <div class="group__body">
+            <Show when={hello()}>
+              {(h) => (
+                <FrequencyTuner
+                  hz={h().center_hz}
+                  onTune={(hz) => {
+                    setHello({ ...h(), center_hz: hz });
+                    send({ type: "SetCenter", payload: { hz } });
+                  }}
+                />
+              )}
+            </Show>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="group__label">demod</div>
+          <div class="group__body">
+            <select
+              class="select"
+              value={demod()?.mode ?? "fm"}
+              onChange={(e) =>
+                send({ type: "SetDemodMode", payload: { mode: e.currentTarget.value } })
+              }
+            >
+              <option value="fm">FM</option>
+              <option value="nfm">NFM</option>
+              <option value="usb">USB</option>
+              <option value="lsb">LSB</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="group__label">colormap</div>
+          <div class="group__body">
+            <select
+              class="select"
+              value={cmap()}
+              onChange={(e) => {
+                const name = e.currentTarget.value as ColormapName;
+                setCmap(name);
+                waterfall?.setColormap(colormap(name));
+              }}
+            >
+              {COLORMAP_NAMES.map((n) => (
+                <option value={n}>{n}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="group__label">theme</div>
+          <div class="group__body">
+            <select
+              class="select"
+              value={theme()}
+              onChange={(e) => applyTheme(e.currentTarget.value as Theme)}
+            >
+              {THEMES.map((t) => (
+                <option value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
     </div>
   );
