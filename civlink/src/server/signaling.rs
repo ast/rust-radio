@@ -9,9 +9,11 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use axum::extract::State;
+use axum::RequestExt;
+use axum::extract::{Request, State};
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::response::IntoResponse;
+use axum::http::{StatusCode, Uri};
+use axum::response::Response;
 use tokio::sync::mpsc;
 use tokio_stream::{Stream, StreamExt};
 use webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
@@ -28,20 +30,39 @@ static SESSION_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 type RadioEventStream = Pin<Box<dyn Stream<Item = sidebridge::RadioEvent> + Send + Unpin>>;
 
+fn token_from_uri(uri: &Uri) -> Option<String> {
+    url::form_urlencoded::parse(uri.query()?.as_bytes())
+        .find(|(k, _)| k == "token")
+        .map(|(_, v)| v.into_owned())
+}
+
 pub async fn ws_handler(
-    ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
-    tracing::info!("WebSocket upgrade request");
-    ws.on_upgrade(move |socket| async move {
-        if let Some(session) = SignalingSession::establish(socket, state).await {
+    mut req: Request,
+) -> Result<Response, StatusCode> {
+    let Some(token) = token_from_uri(req.uri()) else {
+        tracing::warn!("rejected /ws: missing token");
+        return Err(StatusCode::UNAUTHORIZED);
+    };
+    let Some(username) = state.sessions.username(&token).await else {
+        tracing::warn!("rejected /ws: unknown token");
+        return Err(StatusCode::UNAUTHORIZED);
+    };
+    tracing::info!(%username, "WebSocket upgrade request");
+    let ws: WebSocketUpgrade = req
+        .extract_parts()
+        .await
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    Ok(ws.on_upgrade(move |socket| async move {
+        if let Some(session) = SignalingSession::establish(socket, state, username).await {
             session.run().await;
         }
-    })
+    }))
 }
 
 struct SignalingSession {
     sid: u64,
+    username: String,
     socket: WebSocket,
     pc: Arc<RTCPeerConnection>,
     state: Arc<AppState>,
@@ -54,9 +75,13 @@ impl SignalingSession {
     /// peer connection, subscribe to radio events, negotiate the answer, and
     /// wire the ICE / connection-state callbacks. Returns `None` if any step
     /// fails — errors are logged inside.
-    async fn establish(mut socket: WebSocket, state: Arc<AppState>) -> Option<Self> {
+    async fn establish(
+        mut socket: WebSocket,
+        state: Arc<AppState>,
+        username: String,
+    ) -> Option<Self> {
         let sid = SESSION_COUNTER.fetch_add(1, Ordering::Relaxed);
-        tracing::info!(sid, "WebSocket connection established, waiting for offer");
+        tracing::info!(sid, %username, "WebSocket connection established, waiting for offer");
 
         let Some(offer) = handshake::wait_for_offer(&mut socket).await else {
             tracing::warn!(sid, "client disconnected before sending offer");
@@ -109,6 +134,7 @@ impl SignalingSession {
 
         Some(Self {
             sid,
+            username,
             socket,
             pc,
             state,
@@ -144,7 +170,7 @@ impl SignalingSession {
         if let Err(e) = self.pc.close().await {
             tracing::error!(self.sid, "failed to close peer connection: {e}");
         }
-        tracing::info!(self.sid, "signaling session ended");
+        tracing::info!(self.sid, username = %self.username, "signaling session ended");
     }
 
     fn radio(&self) -> Option<&RadioHandle> {

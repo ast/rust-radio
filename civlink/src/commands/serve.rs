@@ -1,6 +1,7 @@
 // Copyright SM6WJM 2026
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Result;
 use axum::Router;
@@ -58,6 +59,17 @@ pub async fn run(config: Config) -> Result<()> {
     };
 
     let state = AppState::new(config.clone(), audio, radio);
+
+    let sweep_state = Arc::clone(&state);
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(15 * 60));
+        ticker.tick().await; // skip immediate first tick
+        loop {
+            ticker.tick().await;
+            sweep_state.sessions.remove_expired().await;
+            tracing::debug!("session sweep complete");
+        }
+    });
 
     let app = Router::new()
         .nest("/api", api_router(Arc::clone(&state)))

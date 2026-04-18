@@ -35,6 +35,11 @@ fn test_app() -> Router {
     api_router(Arc::clone(&state))
 }
 
+fn test_app_with_state() -> (Router, Arc<AppState>) {
+    let state = AppState::new(test_config(), None, None);
+    (api_router(Arc::clone(&state)), state)
+}
+
 #[tokio::test]
 async fn login_with_valid_credentials() {
     let app = test_app();
@@ -101,4 +106,64 @@ async fn login_with_unknown_user() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn ws_rejects_without_token() {
+    let app = test_app();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/ws")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn ws_rejects_unknown_token() {
+    let app = test_app();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/ws?token=bogus")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn ws_accepts_valid_token() {
+    let (app, state) = test_app_with_state();
+    state
+        .sessions
+        .insert("valid-token".to_string(), "testuser".to_string())
+        .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/ws?token=valid-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // No WS upgrade headers, so WebSocketUpgrade extractor fails after auth
+    // passes. Any non-401 status proves the auth gate let us through.
+    assert_ne!(response.status(), StatusCode::UNAUTHORIZED);
 }

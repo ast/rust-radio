@@ -34,3 +34,12 @@ async fn multiple_sessions() {
     assert_eq!(store.username("t1").await, Some("user1".to_string()));
     assert_eq!(store.username("t2").await, Some("user2".to_string()));
 }
+
+#[tokio::test]
+async fn remove_expired_keeps_fresh_sessions() {
+    let store = SessionStore::new();
+    store.insert("token123".to_string(), "sm6wjm".to_string()).await;
+    store.remove_expired().await;
+
+    assert_eq!(store.username("token123").await, Some("sm6wjm".to_string()));
+}
