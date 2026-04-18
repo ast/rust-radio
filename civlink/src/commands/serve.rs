@@ -43,11 +43,7 @@ pub async fn run(config: Config) -> Result<()> {
     };
 
     // Start audio capture
-    let audio = match AudioCapture::start(
-        config.radio.audio_device.as_deref(),
-        config.radio.sample_rate,
-        2, // stereo
-    ) {
+    let audio = match AudioCapture::start(config.radio.audio_device.as_deref()) {
         Ok(capture) => {
             tracing::info!("audio capture started");
             Some(capture)

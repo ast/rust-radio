@@ -4,7 +4,6 @@ listen_addr = "0.0.0.0:8080"
 [radio]
 url = "serial:///dev/ic-705a"
 # audio_device = "USB Audio CODEC"  # uses PipeWire default source
-sample_rate = 48000
 
 [[users]]
 username = "sm6wjm"

@@ -19,12 +19,6 @@ pub struct ServerConfig {
 pub struct RadioConfig {
     pub url: String,
     pub audio_device: Option<String>,
-    #[serde(default = "default_sample_rate")]
-    pub sample_rate: u32,
-}
-
-fn default_sample_rate() -> u32 {
-    48000
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

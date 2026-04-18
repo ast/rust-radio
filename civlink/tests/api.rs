@@ -21,7 +21,6 @@ fn test_config() -> Config {
         radio: RadioConfig {
             url: "tcp://localhost:9000".to_string(),
             audio_device: None,
-            sample_rate: 48000,
         },
         users: vec![UserRecord {
             username: "testuser".to_string(),

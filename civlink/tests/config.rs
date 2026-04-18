@@ -13,7 +13,6 @@ fn load_and_save_round_trip() {
         radio: RadioConfig {
             url: "tcp://shack:9000".to_string(),
             audio_device: Some("USB Audio CODEC".to_string()),
-            sample_rate: 48000,
         },
         users: vec![UserRecord {
             username: "sm6wjm".to_string(),
@@ -27,7 +26,7 @@ fn load_and_save_round_trip() {
     let loaded = Config::load(tmp.path()).unwrap();
     assert_eq!(loaded.server.listen_addr, "0.0.0.0:8080");
     assert_eq!(loaded.radio.url, "tcp://shack:9000");
-    assert_eq!(loaded.radio.sample_rate, 48000);
+    assert_eq!(loaded.radio.audio_device.as_deref(), Some("USB Audio CODEC"));
     assert_eq!(loaded.users.len(), 1);
     assert_eq!(loaded.users[0].username, "sm6wjm");
 }
@@ -47,7 +46,6 @@ url = "serial:///dev/ttyUSB0"
     let config = Config::load(tmp.path()).unwrap();
     assert_eq!(config.server.listen_addr, "127.0.0.1:3000");
     assert_eq!(config.radio.audio_device, None);
-    assert_eq!(config.radio.sample_rate, 48000); // default
     assert!(config.users.is_empty());
 }
 

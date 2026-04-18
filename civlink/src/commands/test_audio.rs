@@ -9,15 +9,20 @@ use crate::Config;
 const SILENCE_THRESHOLD: f32 = 0.001;
 
 pub async fn run(config: Config) -> Result<()> {
-    let sample_rate = config.radio.sample_rate;
-    let channels: u16 = 1;
+    let capture = AudioCapture::start(config.radio.audio_device.as_deref())?;
+    let sample_rate = capture.sample_rate();
+    let channels = capture.channels();
+    let opus_channels = match channels {
+        1 => Channels::Mono,
+        2 => Channels::Stereo,
+        _ => anyhow::bail!("unsupported channel count: {channels}"),
+    };
     let frame_size = (sample_rate as usize / 1000) * 20;
 
-    let capture = AudioCapture::start(config.radio.audio_device.as_deref(), sample_rate, channels)?;
     let mut rx = capture.subscribe();
 
-    let mut decoder = Decoder::new(sample_rate, Channels::Mono)?;
-    let mut decode_buf = vec![0f32; frame_size];
+    let mut decoder = Decoder::new(sample_rate, opus_channels)?;
+    let mut decode_buf = vec![0f32; frame_size * channels as usize];
 
     let mut total: u64 = 0;
     let mut silent: u64 = 0;

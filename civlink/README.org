@@ -251,7 +251,6 @@ listen_addr = "0.0.0.0:8080"
 [radio]
 url = "tcp://shack:9000"              # or "serial:///dev/ttyUSB0?baud=115200"
 audio_device = "USB Audio CODEC"      # optional, auto-detected if omitted
-sample_rate = 48000                   # default 48000
 #+END_SRC
 
 * User management
