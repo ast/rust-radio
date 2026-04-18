@@ -1,13 +1,15 @@
 // Copyright SM6WJM 2026
 
-use arrayvec::ArrayVec;
 use async_trait::async_trait;
+use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use thiserror::Error;
 use tokio::sync::mpsc;
 
-/// Maximum number of amplitude bins in a scope frame.
+/// Upper bound on the amplitude bins in a scope frame. Drivers clamp to this
+/// at the parse boundary; consumers should treat `ScopeFrame.bins.len()` as
+/// the authoritative size.
 pub const MAX_SCOPE_BINS: usize = 512;
 
 // ---------------------------------------------------------------------------
@@ -111,8 +113,9 @@ pub enum ScopeMode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScopeFrame {
     pub freq: ScopeFreq,
-    /// Amplitude bins (typically 0–160 on Icom radios).
-    pub bins: ArrayVec<u8, MAX_SCOPE_BINS>,
+    /// Amplitude bins (typically 0–160 on Icom radios). Capped at
+    /// `MAX_SCOPE_BINS` at construction.
+    pub bins: Bytes,
 }
 
 /// Radio event — frequency changes, mode changes, scope data, and meter

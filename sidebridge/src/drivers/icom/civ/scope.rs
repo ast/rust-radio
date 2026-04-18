@@ -3,8 +3,6 @@
 use bytes::Bytes;
 use thiserror::Error;
 
-use arrayvec::ArrayVec;
-
 use super::parser::parse_bcd_to_u64;
 use crate::traits::{ScopeFrame, ScopeFreq, ScopeMode, MAX_SCOPE_BINS};
 
@@ -336,12 +334,11 @@ impl ScopeAssembler {
                 upper_hz: *upper_edge_hz,
             },
         };
-        let mut arr = ArrayVec::<u8, MAX_SCOPE_BINS>::new();
         let len = bins.len().min(MAX_SCOPE_BINS);
-        // SAFETY: we just clamped len to capacity
-        unsafe { arr.set_len(len); }
-        arr[..len].copy_from_slice(&bins[..len]);
-        Some(ScopeFrame { freq, bins: arr })
+        Some(ScopeFrame {
+            freq,
+            bins: Bytes::copy_from_slice(&bins[..len]),
+        })
     }
 }
 

@@ -118,7 +118,7 @@ fn parse_bool(s: &str) -> Result<bool, String> {
 
 fn parse_hex(s: &str) -> Result<Vec<u8>> {
     let cleaned: String = s.chars().filter(|c| !c.is_ascii_whitespace()).collect();
-    if cleaned.len() % 2 != 0 {
+    if !cleaned.len().is_multiple_of(2) {
         bail!("hex string has odd length ({} chars)", cleaned.len());
     }
     (0..cleaned.len())
