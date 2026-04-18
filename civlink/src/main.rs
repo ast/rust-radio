@@ -45,24 +45,24 @@ async fn main() -> anyhow::Result<()> {
     match cli.command {
         Command::Serve => {
             let config = civlink::Config::load(&cli.config)?;
-            civlink::commands::serve::run(config).await?;
+            civlink::commands::serve(config).await?;
         }
         Command::UserAdd { username } => {
-            civlink::commands::user_add::run(&cli.config, &username)?;
+            civlink::commands::user_add(&cli.config, &username)?;
         }
         Command::UserRemove { username } => {
-            civlink::commands::user_remove::run(&cli.config, &username)?;
+            civlink::commands::user_remove(&cli.config, &username)?;
         }
         Command::UserList => {
-            civlink::commands::user_list::run(&cli.config)?;
+            civlink::commands::user_list(&cli.config)?;
         }
         Command::TestAudio => {
             let config = civlink::Config::load(&cli.config)?;
-            civlink::commands::test_audio::run(config).await?;
+            civlink::commands::test_audio(config).await?;
         }
         Command::TestEvents => {
             let config = civlink::Config::load(&cli.config)?;
-            civlink::commands::test_events::run(config).await?;
+            civlink::commands::test_events(config).await?;
         }
     }
 

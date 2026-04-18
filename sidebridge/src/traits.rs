@@ -118,7 +118,7 @@ pub struct ScopeFrame {
 /// Radio event — frequency changes, mode changes, scope data, and meter
 /// readings all arrive over the same link and are delivered through a
 /// single stream.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 #[serde(rename_all = "snake_case")]
 pub enum RadioEvent {

@@ -14,7 +14,6 @@ use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSampl
 use webrtc_media::Sample;
 
 use crate::audio::AudioFrame;
-use crate::error::CivlinkError;
 use crate::Result;
 
 /// Creates a new WebRTC peer connection, optionally with an audio track that
@@ -23,9 +22,7 @@ pub async fn create_peer_connection(
     audio_rx: Option<broadcast::Receiver<AudioFrame>>,
 ) -> Result<Arc<RTCPeerConnection>> {
     let mut media_engine = MediaEngine::default();
-    media_engine
-        .register_default_codecs()
-        .map_err(|e| CivlinkError::WebRtc(format!("failed to register codecs: {e}")))?;
+    media_engine.register_default_codecs()?;
 
     let api = APIBuilder::new().with_media_engine(media_engine).build();
 
@@ -37,11 +34,7 @@ pub async fn create_peer_connection(
         ..Default::default()
     };
 
-    let peer_connection = Arc::new(
-        api.new_peer_connection(config)
-            .await
-            .map_err(|e| CivlinkError::WebRtc(format!("failed to create peer connection: {e}")))?,
-    );
+    let peer_connection = Arc::new(api.new_peer_connection(config).await?);
 
     // Add audio track if capture is available
     if let Some(rx) = audio_rx {
@@ -57,10 +50,7 @@ pub async fn create_peer_connection(
             "civlink-audio".to_owned(),
         ));
 
-        peer_connection
-            .add_track(audio_track.clone())
-            .await
-            .map_err(|e| CivlinkError::WebRtc(format!("failed to add audio track: {e}")))?;
+        peer_connection.add_track(audio_track.clone()).await?;
 
         tokio::spawn(pump_audio(rx, audio_track));
     }

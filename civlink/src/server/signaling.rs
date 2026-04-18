@@ -154,13 +154,13 @@ impl SignalingSession {
                 }
                 Some(candidate) = self.ice_rx.recv() => {
                     if let Err(e) = self.send_ice_candidate(candidate).await {
-                        tracing::error!(self.sid, "send ICE candidate: {e}");
+                        tracing::error!(sid = self.sid, "send ICE candidate: {e}");
                         break;
                     }
                 }
                 Some(event) = Self::next_radio_event(self.radio_events.as_mut()) => {
                     if let Err(e) = self.forward_radio_event(event).await {
-                        tracing::debug!(self.sid, "forward radio event: {e}");
+                        tracing::debug!(sid = self.sid, "forward radio event: {e}");
                         break;
                     }
                 }
@@ -168,9 +168,9 @@ impl SignalingSession {
         }
 
         if let Err(e) = self.pc.close().await {
-            tracing::error!(self.sid, "failed to close peer connection: {e}");
+            tracing::error!(sid = self.sid, "failed to close peer connection: {e}");
         }
-        tracing::info!(self.sid, username = %self.username, "signaling session ended");
+        tracing::info!(sid = self.sid, username = %self.username, "signaling session ended");
     }
 
     fn radio(&self) -> Option<&RadioHandle> {
@@ -201,7 +201,7 @@ impl SignalingSession {
                         }
                     }
                     Ok(SignalingMessage::RadioCommand(cmd)) => {
-                        tracing::info!(self.sid, "radio command: {cmd:?}");
+                        tracing::info!(sid = self.sid, "radio command: {cmd:?}");
                         if let Some(r) = self.radio() {
                             commands::dispatch(r, cmd).await;
                         }
@@ -212,15 +212,15 @@ impl SignalingSession {
                 true
             }
             Some(Ok(Message::Close(_))) => {
-                tracing::info!(self.sid, "WebSocket client disconnected");
+                tracing::info!(sid = self.sid, "WebSocket client disconnected");
                 false
             }
             Some(Err(e)) => {
-                tracing::error!(self.sid, "WebSocket error: {e}");
+                tracing::error!(sid = self.sid, "WebSocket error: {e}");
                 false
             }
             None => {
-                tracing::info!(self.sid, "WebSocket stream ended");
+                tracing::info!(sid = self.sid, "WebSocket stream ended");
                 false
             }
             _ => true,
@@ -243,7 +243,7 @@ impl SignalingSession {
     ) -> Result<(), SignalingError> {
         match &event {
             sidebridge::RadioEvent::Scope(_) => {} // too noisy
-            other => tracing::debug!(self.sid, "radio event: {other:?}"),
+            other => tracing::debug!(sid = self.sid, "radio event: {other:?}"),
         }
         let value = serde_json::to_value(&event)?;
         let msg = SignalingMessage::RadioEvent(value);

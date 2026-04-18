@@ -41,7 +41,7 @@ pub async fn static_handler(uri: Uri) -> Response {
         Some(content) => Response::builder()
             .header(header::CONTENT_TYPE, mime_for(effective_path))
             .body(Body::from(content.data.to_vec()))
-            .unwrap(),
+            .expect("static-file response builder rejected a valid content-type header"),
         None => (StatusCode::NOT_FOUND, "not found").into_response(),
     }
 }

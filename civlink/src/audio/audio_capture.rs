@@ -81,29 +81,25 @@ impl AudioCapture {
         let (tx, _) = broadcast::channel::<AudioFrame>(25);
         let tx_clone = tx.clone();
 
-        let stream = device
-            .build_input_stream(
-                &config,
-                move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                    let result = producer.produce(|slice| {
-                        let n = data.len().min(slice.len());
-                        slice[..n].copy_from_slice(&data[..n]);
-                        n
-                    });
-                    if result.is_err() {
-                        tracing::warn!("audio ring buffer disconnected");
-                    }
-                },
-                move |err| {
-                    tracing::error!("audio input stream error: {err}");
-                },
-                None,
-            )
-            .map_err(|e| CivlinkError::Audio(format!("failed to build input stream: {e}")))?;
+        let stream = device.build_input_stream(
+            &config,
+            move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                let result = producer.produce(|slice| {
+                    let n = data.len().min(slice.len());
+                    slice[..n].copy_from_slice(&data[..n]);
+                    n
+                });
+                if result.is_err() {
+                    tracing::warn!("audio ring buffer disconnected");
+                }
+            },
+            move |err| {
+                tracing::error!("audio input stream error: {err}");
+            },
+            None,
+        )?;
 
-        stream
-            .play()
-            .map_err(|e| CivlinkError::Audio(format!("failed to start stream: {e}")))?;
+        stream.play()?;
 
         tracing::info!("audio capture stream started");
 
@@ -115,8 +111,7 @@ impl AudioCapture {
                 if let Err(e) = encoder.run() {
                     tracing::error!("audio encoder exited with error: {e}");
                 }
-            })
-            .map_err(|e| CivlinkError::Audio(format!("failed to spawn encoder thread: {e}")))?;
+            })?;
 
         Ok(Self {
             tx,
@@ -148,9 +143,7 @@ const OPUS_RATES: [u32; 5] = [48000, 24000, 16000, 12000, 8000];
 /// the highest Opus rate covered by an f32 range, preferring ranges with the
 /// same channel count as the default.
 fn pick_opus_config(device: &cpal::Device) -> Result<cpal::SupportedStreamConfig> {
-    let default = device
-        .default_input_config()
-        .map_err(|e| CivlinkError::Audio(format!("failed to get input config: {e}")))?;
+    let default = device.default_input_config()?;
 
     let default_rate = default.sample_rate();
     let default_channels = default.channels();
@@ -170,8 +163,7 @@ fn pick_opus_config(device: &cpal::Device) -> Result<cpal::SupportedStreamConfig
     );
 
     let supported: Vec<_> = device
-        .supported_input_configs()
-        .map_err(|e| CivlinkError::Audio(format!("failed to query configs: {e}")))?
+        .supported_input_configs()?
         .filter(|r| r.sample_format() == cpal::SampleFormat::F32)
         .filter(|r| matches!(r.channels(), 1 | 2))
         .collect();
@@ -217,9 +209,7 @@ fn pick_opus_config(device: &cpal::Device) -> Result<cpal::SupportedStreamConfig
 }
 
 fn find_device(host: &cpal::Host, name: &str) -> Result<cpal::Device> {
-    let devices = host
-        .input_devices()
-        .map_err(|e| CivlinkError::Audio(format!("failed to enumerate devices: {e}")))?;
+    let devices = host.input_devices()?;
 
     for device in devices {
         let desc = device

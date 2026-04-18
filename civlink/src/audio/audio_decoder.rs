@@ -25,8 +25,7 @@ impl AudioDecoder {
         opus_channels: Channels,
         frame_samples: usize,
     ) -> Result<Self> {
-        let decoder = Decoder::new(sample_rate, opus_channels)
-            .map_err(|e| CivlinkError::Audio(format!("failed to create opus decoder: {e}")))?;
+        let decoder = Decoder::new(sample_rate, opus_channels)?;
 
         Ok(Self {
             rx,
@@ -48,8 +47,7 @@ impl AudioDecoder {
 
             let decoded_samples = self
                 .decoder
-                .decode_float(&packet, &mut self.decode_buf, false)
-                .map_err(|e| CivlinkError::Audio(format!("opus decode error: {e}")))?;
+                .decode_float(&packet, &mut self.decode_buf, false)?;
 
             let samples = &self.decode_buf[..decoded_samples];
 

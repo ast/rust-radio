@@ -27,8 +27,7 @@ impl AudioEncoder {
         opus_channels: Channels,
         frame_samples: usize,
     ) -> Result<Self> {
-        let encoder = Encoder::new(sample_rate, opus_channels, Application::Audio)
-            .map_err(|e| CivlinkError::Audio(format!("failed to create opus encoder: {e}")))?;
+        let encoder = Encoder::new(sample_rate, opus_channels, Application::Audio)?;
 
         Ok(Self {
             consumer,
@@ -55,8 +54,7 @@ impl AudioEncoder {
 
             let encoded_len = self
                 .encoder
-                .encode_float(&self.input_buf, &mut self.output_buf)
-                .map_err(|e| CivlinkError::Audio(format!("opus encode error: {e}")))?;
+                .encode_float(&self.input_buf, &mut self.output_buf)?;
 
             let frame = AudioFrame {
                 data: Bytes::copy_from_slice(&self.output_buf[..encoded_len]),

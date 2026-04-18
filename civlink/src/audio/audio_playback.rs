@@ -37,9 +37,7 @@ impl AudioPlayback {
             .unwrap_or_else(|_| "unknown".into());
         tracing::info!("audio playback device: {device_desc}");
 
-        let default_config = device
-            .default_output_config()
-            .map_err(|e| CivlinkError::Audio(format!("failed to get output config: {e}")))?;
+        let default_config = device.default_output_config()?;
 
         tracing::debug!("default output config: {default_config:?}");
 
@@ -75,36 +73,32 @@ impl AudioPlayback {
         // Bounded channel for incoming opus packets (~500ms at 20ms frames)
         let (tx, rx) = mpsc::sync_channel::<Bytes>(25);
 
-        let stream = device
-            .build_output_stream(
-                &config,
-                move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                    let result = consumer.consume(|slice| {
-                        let n = data.len().min(slice.len());
-                        data[..n].copy_from_slice(&slice[..n]);
-                        // Zero-fill any remaining output to avoid stale audio
-                        for sample in &mut data[n..] {
-                            *sample = 0.0;
-                        }
-                        n
-                    });
-                    if result.is_err() {
-                        // Decoder disconnected — output silence
-                        for sample in data.iter_mut() {
-                            *sample = 0.0;
-                        }
+        let stream = device.build_output_stream(
+            &config,
+            move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                let result = consumer.consume(|slice| {
+                    let n = data.len().min(slice.len());
+                    data[..n].copy_from_slice(&slice[..n]);
+                    // Zero-fill any remaining output to avoid stale audio
+                    for sample in &mut data[n..] {
+                        *sample = 0.0;
                     }
-                },
-                move |err| {
-                    tracing::error!("audio output stream error: {err}");
-                },
-                None,
-            )
-            .map_err(|e| CivlinkError::Audio(format!("failed to build output stream: {e}")))?;
+                    n
+                });
+                if result.is_err() {
+                    // Decoder disconnected — output silence
+                    for sample in data.iter_mut() {
+                        *sample = 0.0;
+                    }
+                }
+            },
+            move |err| {
+                tracing::error!("audio output stream error: {err}");
+            },
+            None,
+        )?;
 
-        stream
-            .play()
-            .map_err(|e| CivlinkError::Audio(format!("failed to start stream: {e}")))?;
+        stream.play()?;
 
         tracing::info!("audio playback stream started");
 
@@ -116,8 +110,7 @@ impl AudioPlayback {
                 if let Err(e) = decoder.run() {
                     tracing::error!("audio decoder exited with error: {e}");
                 }
-            })
-            .map_err(|e| CivlinkError::Audio(format!("failed to spawn decoder thread: {e}")))?;
+            })?;
 
         Ok(Self { tx, _stream: stream })
     }
@@ -131,9 +124,7 @@ impl AudioPlayback {
 }
 
 fn find_device(host: &cpal::Host, name: &str) -> Result<cpal::Device> {
-    let devices = host
-        .output_devices()
-        .map_err(|e| CivlinkError::Audio(format!("failed to enumerate devices: {e}")))?;
+    let devices = host.output_devices()?;
 
     for device in devices {
         let desc = device

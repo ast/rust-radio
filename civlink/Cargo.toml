@@ -49,7 +49,6 @@ url = "2"
 # Workspace crates
 sidebridge = { path = "../sidebridge" }
 doublemap = { path = "../doublemap" }
-pool = { path = "../pool" }
 rust-embed = { version = "8.11.0", features = ["mime-guess"] }
 #rtp = { path = "../rtp" }
 

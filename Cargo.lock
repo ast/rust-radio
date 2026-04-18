@@ -661,7 +661,6 @@ dependencies = [
  "doublemap",
  "http-body-util",
  "opus",
- "pool",
  "rand",
  "rust-embed",
  "serde",

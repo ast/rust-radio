@@ -31,7 +31,7 @@ impl RadioHandle {
 
         let event_rx = radio
             .take_event_stream()
-            .expect("event stream not yet taken");
+            .expect("IcomRadio::take_event_stream returned None on a freshly connected radio");
 
         let (event_tx, _) = broadcast::channel(64);
 
@@ -91,13 +91,16 @@ impl RadioHandle {
     }
 
     /// Trigger frequency and mode reads so current state is broadcast to all subscribers.
+    /// RF gain is best-effort — radios that don't support it won't block connect.
     pub async fn read_initial_state(&self) -> Result<()> {
         self.radio
             .read_frequency()
             .await
             .map_err(CivlinkError::Radio)?;
         self.radio.read_mode().await.map_err(CivlinkError::Radio)?;
-        self.radio.read_rf_gain().await.map_err(CivlinkError::Radio)?;
+        if let Err(e) = self.radio.read_rf_gain().await {
+            tracing::debug!("read_rf_gain unsupported or failed: {e}");
+        }
         Ok(())
     }
 
