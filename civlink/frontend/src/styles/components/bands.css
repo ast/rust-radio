@@ -1,0 +1,64 @@
+.band-section {
+  background: var(--color-surface);
+  padding: 0.4rem 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.band-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+}
+
+.band-buttons {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.band-btn {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--color-text-dim);
+  background: var(--color-surface-inset);
+  padding: 0.2rem 0.45rem;
+  border-radius: 2px;
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: all 0.1s;
+  flex-shrink: 0;
+}
+
+.band-btn:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+
+.band-btn-active {
+  color: var(--color-warning);
+  background: var(--color-warning-dim);
+  border-color: var(--color-warning-border);
+}
+
+/* On narrow screens switch to horizontal scroll with snap so the row stays tidy. */
+@media (max-width: 600px) {
+  .band-buttons {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .band-buttons::-webkit-scrollbar { display: none; }
+  .band-btn { scroll-snap-align: start; }
+}
+
+@media (pointer: coarse) {
+  .band-btn { padding: 0.4rem 0.6rem; font-size: 0.8rem; }
+}

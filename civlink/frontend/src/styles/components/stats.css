@@ -1,0 +1,73 @@
+.stats-panel {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.4rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.status-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.9rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-text);
+}
+
+.status-line-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-dim);
+}
+.status-line.quality-good  .status-line-dot { background: var(--color-success); box-shadow: 0 0 4px var(--color-success); }
+.status-line.quality-fair  .status-line-dot { background: var(--color-warning); box-shadow: 0 0 4px var(--color-warning); }
+.status-line.quality-poor  .status-line-dot { background: var(--color-danger); box-shadow: 0 0 4px var(--color-danger); }
+
+.status-line-field {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+}
+.status-line-label {
+  color: var(--color-text-dim);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.status-line-value {
+  color: var(--color-text-bright);
+}
+
+.stats-graph {
+  position: relative;
+  background: var(--color-surface-inset);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  padding: 0;
+}
+.stats-graph canvas {
+  display: block;
+  width: 100%;
+}
+.stats-graph-legend {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  display: flex;
+  gap: 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  pointer-events: none;
+}
+.stats-graph-legend .legend-in  { color: var(--color-rx); }
+.stats-graph-legend .legend-out { color: var(--color-tx); }
+
+/* On narrow screens hide the rarely-needed fields so the line stays to 1 row */
+@media (max-width: 500px) {
+  .status-line-field.hide-narrow { display: none; }
+  .status-line { gap: 0.6rem; }
+}

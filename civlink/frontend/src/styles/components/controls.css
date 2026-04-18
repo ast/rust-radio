@@ -1,0 +1,106 @@
+.controls-bar {
+  background: var(--color-surface);
+  padding: 0.5rem 0.75rem;
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.audio-controls-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.audio-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.ctrl-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+}
+
+.audio-controls button {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  background: var(--color-surface-inset);
+  color: var(--color-text-dim);
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: all 0.1s;
+  min-height: 1.8rem;
+}
+
+.audio-controls button:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+
+.audio-controls button.muted {
+  color: var(--color-danger);
+  border-color: rgba(239, 83, 80, 0.25);
+}
+
+.audio-controls input[type="range"] {
+  flex: 1;
+  max-width: 160px;
+  height: 4px;
+  accent-color: var(--color-action);
+  cursor: pointer;
+}
+
+.audio-controls .vol-value {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-text-dim);
+  min-width: 2.5em;
+  text-align: right;
+}
+
+.audio-start-btn {
+  display: block;
+  width: 100%;
+  padding: 0.6rem;
+  border: none;
+  background: var(--color-surface);
+  color: var(--color-action);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: all 0.1s;
+  min-height: 2.5rem;
+}
+
+.audio-start-btn:hover {
+  background: var(--color-action-dim);
+}
+
+@media (pointer: coarse) {
+  .audio-controls button {
+    min-height: 2.2rem;
+    padding: 0.4rem 0.7rem;
+    font-size: 0.75rem;
+  }
+  .audio-controls input[type="range"] {
+    height: 6px;
+    max-width: none;
+  }
+}

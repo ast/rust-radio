@@ -1,0 +1,12 @@
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/600.css";
+
+@import "./reset.css";
+@import "./base.css";
+@import "./components/login.css";
+@import "./components/header.css";
+@import "./components/stats.css";
+@import "./components/vfo.css";
+@import "./components/bands.css";
+@import "./components/spectrum.css";
+@import "./components/controls.css";

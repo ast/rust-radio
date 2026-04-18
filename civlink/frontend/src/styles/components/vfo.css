@@ -1,0 +1,138 @@
+.vfo-section {
+  background: var(--color-surface);
+  padding: 0.75rem;
+}
+
+.vfo-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.vfo-frequency {
+  font-family: var(--font-mono);
+  font-size: 3rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--color-text-bright);
+  line-height: 1;
+  background: var(--color-surface-inset);
+  padding: 0.5rem 0.75rem;
+  border-radius: 3px;
+  border: 1px solid #252525;
+  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.4);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.05em;
+}
+
+.freq-group {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 1em;
+}
+
+.freq-mhz  { color: var(--color-mhz); }
+.freq-khz  { color: var(--color-khz); }
+.freq-hz   { color: var(--color-hz); font-size: 0.65em; }
+.freq-dot  { color: #444444; margin: 0 0.02em; align-self: center; }
+
+.freq-tunable {
+  cursor: ns-resize;
+  user-select: none;
+  transition: color 0.1s;
+  touch-action: none;
+  text-align: center;
+}
+
+.freq-tunable:hover {
+  color: var(--color-selected);
+  text-shadow: 0 0 8px var(--color-selected-dim);
+}
+
+.freq-unit {
+  font-size: 0.65em;
+  color: var(--color-text-dim);
+  margin-left: 0.3em;
+  letter-spacing: 0;
+  align-self: center;
+}
+
+/* Per-digit +/- tune buttons — visible on touch devices (and anywhere with a
+ * coarse pointer). On desktop with a mouse wheel they stay hidden. */
+.freq-step-btn {
+  display: none;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  line-height: 1;
+  color: var(--color-text-dim);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  padding: 3px 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.freq-step-btn:active {
+  background: var(--color-selected-dim);
+  color: var(--color-selected);
+  border-color: var(--color-selected-border);
+}
+
+@media (pointer: coarse) {
+  .freq-step-btn { display: block; }
+  .vfo-frequency { font-size: 2.4rem; }
+}
+
+/* ---- Mode selector (grid right of VFO) ---- */
+
+.mode-panel {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.mode-btn {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-text-dim);
+  background: var(--color-surface-inset);
+  padding: 0.25rem 0;
+  border-radius: 2px;
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  text-align: center;
+  transition: all 0.1s;
+  white-space: nowrap;
+  min-height: 1.8rem;
+}
+
+.mode-btn:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+  background: #1e1e1e;
+}
+
+.mode-btn-active {
+  color: var(--color-selected);
+  background: var(--color-selected-dim);
+  border-color: var(--color-selected-border);
+}
+
+@media (max-width: 600px) {
+  .vfo-frequency { font-size: 2.2rem; }
+  .vfo-row { flex-direction: column; align-items: stretch; }
+  .mode-panel { grid-template-columns: repeat(4, 1fr); }
+}
+
+@media (pointer: coarse) {
+  .mode-btn { min-height: 2.2rem; font-size: 0.75rem; }
+}

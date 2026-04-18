@@ -66,14 +66,33 @@ const activeBand = (hz: number): string | null => {
   return null;
 };
 
+interface DigitProps {
+  value: string;
+  step: number;
+  colorClass: string;
+  tune: (delta: number) => void;
+}
+
+const Digit: Component<DigitProps> = (p) => {
+  const onWheel = (e: WheelEvent) => {
+    e.preventDefault();
+    p.tune(e.deltaY < 0 ? p.step : -p.step);
+  };
+  return (
+    <span class="freq-group">
+      <button class="freq-step-btn" onClick={() => p.tune(p.step)} aria-label="increment">▲</button>
+      <span class={`${p.colorClass} freq-tunable`} onWheel={onWheel}>{p.value}</span>
+      <button class="freq-step-btn" onClick={() => p.tune(-p.step)} aria-label="decrement">▼</button>
+    </span>
+  );
+};
+
 const VfoDisplay: Component<VfoDisplayProps> = (props) => {
   const freq = () => formatFrequency(props.frequency);
   const currentBand = () => activeBand(props.frequency);
 
-  const handleWheel = (step: number) => (e: WheelEvent) => {
-    e.preventDefault();
-    if (!props.onTune) return;
-    const delta = e.deltaY < 0 ? step : -step;
+  const tune = (delta: number) => {
+    if (!props.onTune || props.frequency <= 0) return;
     props.onTune(props.frequency + delta);
   };
 
@@ -82,11 +101,11 @@ const VfoDisplay: Component<VfoDisplayProps> = (props) => {
       <div class="vfo-section">
         <div class="vfo-row">
           <div class="vfo-frequency">
-            <span class="freq-mhz freq-tunable" onWheel={handleWheel(1_000_000)}>{freq().mhz}</span>
+            <Digit value={freq().mhz}   step={1_000_000} colorClass="freq-mhz" tune={tune} />
             <span class="freq-dot">.</span>
-            <span class="freq-khz freq-tunable" onWheel={handleWheel(1_000)}>{freq().khz}</span>
+            <Digit value={freq().khz}   step={1_000}     colorClass="freq-khz" tune={tune} />
             <span class="freq-dot">.</span>
-            <span class="freq-hz freq-tunable" onWheel={handleWheel(100)}>{freq().hz100}</span>
+            <Digit value={freq().hz100} step={100}       colorClass="freq-hz"  tune={tune} />
             <span class="freq-unit">MHz</span>
           </div>
           <div class="mode-panel">

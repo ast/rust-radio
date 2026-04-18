@@ -1,5 +1,6 @@
-import { type Component, createEffect, onMount, For, Show } from "solid-js";
+import { type Component, createEffect, createSignal, onMount, onCleanup, For, Show } from "solid-js";
 import type { ScopeFreq, ScopeMode } from "../types/radio";
+import { theme } from "../theme";
 
 interface SpectrumProps {
   bins: number[];
@@ -15,7 +16,6 @@ interface SpectrumProps {
   onFixedEdgeChange?: (edge: number) => void;
 }
 
-// IC-705 valid scope spans (center mode)
 const SPANS: { label: string; hz: number }[] = [
   { label: "±2.5k",  hz:    2_500 },
   { label: "±5k",    hz:    5_000 },
@@ -29,44 +29,14 @@ const SPANS: { label: string; hz: number }[] = [
 
 const EDGES = [1, 2, 3];
 
-const CANVAS_WIDTH = 800;
-const SPECTRUM_HEIGHT = 100;
-const WATERFALL_HEIGHT = 300;
-const BG_COLOR = "#0a0a0a";
-const LINE_COLOR = "#4dabf5";
-const FILL_COLOR = "rgba(77, 171, 245, 0.1)";
-// IC-705 scope bins range 0-160
 const BIN_MAX = 160;
 
-// WebSDR-style color map: dark blue -> cyan -> green -> yellow -> red -> white
-function binToColor(value: number): [number, number, number] {
-  const t = Math.min(value / BIN_MAX, 1.0);
+// CSS-pixel heights; canvas physical pixels are these × dpr.
+const DESKTOP_SPEC_H = 100;
+const DESKTOP_WF_H = 300;
+const MOBILE_SPEC_H = 80;
+const MOBILE_WF_H = 180;
 
-  if (t < 0.2) {
-    const s = t / 0.2;
-    return [0, 0, Math.round(s * 80)];
-  } else if (t < 0.35) {
-    const s = (t - 0.2) / 0.15;
-    return [0, 0, Math.round(80 + s * 175)];
-  } else if (t < 0.5) {
-    const s = (t - 0.35) / 0.15;
-    return [0, Math.round(s * 255), 255];
-  } else if (t < 0.65) {
-    const s = (t - 0.5) / 0.15;
-    return [0, 255, Math.round(255 * (1 - s))];
-  } else if (t < 0.8) {
-    const s = (t - 0.65) / 0.15;
-    return [Math.round(s * 255), 255, 0];
-  } else if (t < 0.9) {
-    const s = (t - 0.8) / 0.1;
-    return [255, Math.round(255 * (1 - s)), 0];
-  } else {
-    const s = (t - 0.9) / 0.1;
-    return [255, Math.round(s * 255), Math.round(s * 255)];
-  }
-}
-
-// IC-705 factory default IF filter widths (Hz) per mode and filter preset.
 const FILTER_WIDTHS: Record<string, [number, number, number]> = {
   Lsb:     [3000, 2400, 500],
   Usb:     [3000, 2400, 500],
@@ -89,8 +59,7 @@ function getFilterWidth(mode?: string, filter?: number): number {
   return widths[idx];
 }
 
-/** Passband extent relative to the VFO marker for each demodulation mode.
- *  Returns [lowOffset, highOffset] in Hz (negative = below marker). */
+/** Passband extent relative to the VFO marker for each demodulation mode. */
 function passbandOffsets(mode: string | undefined, filterHz: number): [number, number] {
   switch (mode) {
     case "Usb":
@@ -100,7 +69,6 @@ function passbandOffsets(mode: string | undefined, filterHz: number): [number, n
     case "DataLsb":
       return [-filterHz, 0];
     default:
-      // CW/RTTY/FM/AM — symmetric around VFO
       return [-filterHz / 2, filterHz / 2];
   }
 }
@@ -112,13 +80,54 @@ function scopeRange(f: ScopeFreq): { leftHz: number; rightHz: number } {
   return { leftHz: f.lower_hz, rightHz: f.upper_hz };
 }
 
-const MARKER_COLOR = "rgba(255, 50, 50, 0.9)";
-const PASSBAND_COLOR = "rgba(255, 255, 255, 0.06)";
-const PASSBAND_EDGE_COLOR = "rgba(255, 255, 255, 0.15)";
+interface CanvasSize {
+  cssW: number;
+  specH: number;
+  wfH: number;
+  dpr: number;
+}
 
 const Spectrum: Component<SpectrumProps> = (props) => {
+  let container: HTMLDivElement | undefined;
   let specCanvas: HTMLCanvasElement | undefined;
   let wfCanvas: HTMLCanvasElement | undefined;
+
+  const [size, setSize] = createSignal<CanvasSize>({ cssW: 800, specH: DESKTOP_SPEC_H, wfH: DESKTOP_WF_H, dpr: 1 });
+
+  const resize = () => {
+    if (!container) return;
+    const cssW = Math.max(1, Math.floor(container.clientWidth));
+    const narrow = window.innerWidth < 600;
+    const dpr = window.devicePixelRatio || 1;
+    const specH = narrow ? MOBILE_SPEC_H : DESKTOP_SPEC_H;
+    const wfH = narrow ? MOBILE_WF_H : DESKTOP_WF_H;
+
+    if (specCanvas) {
+      specCanvas.width = cssW * dpr;
+      specCanvas.height = specH * dpr;
+      specCanvas.style.height = `${specH}px`;
+    }
+    if (wfCanvas) {
+      wfCanvas.width = cssW * dpr;
+      wfCanvas.height = wfH * dpr;
+      wfCanvas.style.height = `${wfH}px`;
+      const ctx = wfCanvas.getContext("2d")!;
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, wfCanvas.width, wfCanvas.height);
+    }
+    setSize({ cssW, specH, wfH, dpr });
+  };
+
+  onMount(() => {
+    resize();
+    const obs = new ResizeObserver(resize);
+    if (container) obs.observe(container);
+    window.addEventListener("resize", resize);
+    onCleanup(() => {
+      obs.disconnect();
+      window.removeEventListener("resize", resize);
+    });
+  });
 
   const handleCanvasClick = (e: MouseEvent) => {
     const sf = props.scopeFreq;
@@ -139,109 +148,98 @@ const Spectrum: Component<SpectrumProps> = (props) => {
     props.onClickFrequency(props.frequency + delta);
   };
 
-  onMount(() => {
-    if (specCanvas) {
-      specCanvas.width = CANVAS_WIDTH;
-      specCanvas.height = SPECTRUM_HEIGHT;
-      const ctx = specCanvas.getContext("2d")!;
-      ctx.fillStyle = BG_COLOR;
-      ctx.fillRect(0, 0, CANVAS_WIDTH, SPECTRUM_HEIGHT);
-    }
-    if (wfCanvas) {
-      wfCanvas.width = CANVAS_WIDTH;
-      wfCanvas.height = WATERFALL_HEIGHT;
-      const ctx = wfCanvas.getContext("2d")!;
-      ctx.fillStyle = "#000";
-      ctx.fillRect(0, 0, CANVAS_WIDTH, WATERFALL_HEIGHT);
-    }
-  });
-
   createEffect(() => {
     const bins = props.bins;
+    const { cssW, specH, wfH, dpr } = size();
     if (bins.length === 0) return;
 
-    // --- Spectrum line ---
     if (specCanvas) {
       const ctx = specCanvas.getContext("2d")!;
-      ctx.fillStyle = BG_COLOR;
-      ctx.fillRect(0, 0, CANVAS_WIDTH, SPECTRUM_HEIGHT);
+      const W = cssW * dpr;
+      const H = specH * dpr;
+      ctx.fillStyle = theme.spectrum.bg;
+      ctx.fillRect(0, 0, W, H);
 
       const n = bins.length;
-      const xStep = CANVAS_WIDTH / n;
+      const xStep = W / n;
 
       ctx.beginPath();
-      ctx.moveTo(0, SPECTRUM_HEIGHT);
+      ctx.moveTo(0, H);
       for (let i = 0; i < n; i++) {
-        const y = SPECTRUM_HEIGHT - (bins[i] / BIN_MAX) * SPECTRUM_HEIGHT;
+        const y = H - (bins[i] / BIN_MAX) * H;
         ctx.lineTo(i * xStep, y);
       }
-      ctx.lineTo(CANVAS_WIDTH, SPECTRUM_HEIGHT);
+      ctx.lineTo(W, H);
       ctx.closePath();
-      ctx.fillStyle = FILL_COLOR;
+      ctx.fillStyle = theme.spectrum.fill;
       ctx.fill();
 
       ctx.beginPath();
       for (let i = 0; i < n; i++) {
-        const y = SPECTRUM_HEIGHT - (bins[i] / BIN_MAX) * SPECTRUM_HEIGHT;
+        const y = H - (bins[i] / BIN_MAX) * H;
         const x = i * xStep;
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       }
-      ctx.strokeStyle = LINE_COLOR;
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = theme.spectrum.line;
+      ctx.lineWidth = dpr;
       ctx.stroke();
 
-      // --- Tuning indicator + filter passband ---
       const sf = props.scopeFreq;
       const freq = props.frequency;
       if (sf && freq) {
         const { leftHz, rightHz } = scopeRange(sf);
         const widthHz = rightHz - leftHz;
         if (widthHz > 0 && freq >= leftHz && freq <= rightHz) {
-          const hzToX = (hz: number) => ((hz - leftHz) / widthHz) * CANVAS_WIDTH;
+          const hzToX = (hz: number) => ((hz - leftHz) / widthHz) * W;
           const cx = hzToX(freq);
           const filterHz = getFilterWidth(props.mode, props.filter);
           const [loOff, hiOff] = passbandOffsets(props.mode, filterHz);
           const x0 = hzToX(freq + loOff);
           const x1 = hzToX(freq + hiOff);
 
-          ctx.fillStyle = PASSBAND_COLOR;
-          ctx.fillRect(x0, 0, x1 - x0, SPECTRUM_HEIGHT);
+          ctx.fillStyle = theme.spectrum.passband;
+          ctx.fillRect(x0, 0, x1 - x0, H);
 
-          ctx.strokeStyle = PASSBAND_EDGE_COLOR;
-          ctx.lineWidth = 1;
+          ctx.strokeStyle = theme.spectrum.passbandEdge;
+          ctx.lineWidth = dpr;
           ctx.beginPath();
-          ctx.moveTo(x0, 0); ctx.lineTo(x0, SPECTRUM_HEIGHT);
-          ctx.moveTo(x1, 0); ctx.lineTo(x1, SPECTRUM_HEIGHT);
+          ctx.moveTo(x0, 0); ctx.lineTo(x0, H);
+          ctx.moveTo(x1, 0); ctx.lineTo(x1, H);
           ctx.stroke();
 
-          ctx.strokeStyle = MARKER_COLOR;
-          ctx.lineWidth = 1;
+          ctx.strokeStyle = theme.spectrum.marker;
+          ctx.lineWidth = dpr;
           ctx.beginPath();
           ctx.moveTo(cx, 0);
-          ctx.lineTo(cx, SPECTRUM_HEIGHT);
+          ctx.lineTo(cx, H);
           ctx.stroke();
         }
       }
     }
 
-    // --- Waterfall ---
     if (wfCanvas) {
       const ctx = wfCanvas.getContext("2d")!;
+      const W = cssW * dpr;
+      const H = wfH * dpr;
+      const rowH = Math.max(1, Math.round(dpr));
       const n = bins.length;
 
-      ctx.drawImage(wfCanvas, 0, 0, CANVAS_WIDTH, WATERFALL_HEIGHT, 0, 1, CANVAS_WIDTH, WATERFALL_HEIGHT);
+      // Scroll existing content down by rowH physical pixels.
+      ctx.drawImage(wfCanvas, 0, 0, W, H, 0, rowH, W, H);
 
-      const row = ctx.createImageData(CANVAS_WIDTH, 1);
-      const xStep = n / CANVAS_WIDTH;
-      for (let x = 0; x < CANVAS_WIDTH; x++) {
+      const row = ctx.createImageData(W, rowH);
+      const xStep = n / W;
+      for (let x = 0; x < W; x++) {
         const binIdx = Math.min(Math.floor(x * xStep), n - 1);
-        const [r, g, b] = binToColor(bins[binIdx]);
-        const off = x * 4;
-        row.data[off] = r;
-        row.data[off + 1] = g;
-        row.data[off + 2] = b;
-        row.data[off + 3] = 255;
+        const [r, g, b] = theme.waterfall(bins[binIdx] / BIN_MAX);
+        for (let yy = 0; yy < rowH; yy++) {
+          const off = (yy * W + x) * 4;
+          row.data[off] = r;
+          row.data[off + 1] = g;
+          row.data[off + 2] = b;
+          row.data[off + 3] = 255;
+        }
       }
       ctx.putImageData(row, 0, 0);
     }
@@ -292,8 +290,10 @@ const Spectrum: Component<SpectrumProps> = (props) => {
           }</For>
         </Show>
       </div>
-      <canvas ref={specCanvas} width={CANVAS_WIDTH} height={SPECTRUM_HEIGHT} class="spectrum-clickable" onClick={handleCanvasClick} onWheel={handleCanvasWheel} />
-      <canvas ref={wfCanvas} width={CANVAS_WIDTH} height={WATERFALL_HEIGHT} class="spectrum-clickable" style={{ display: "block" }} onClick={handleCanvasClick} onWheel={handleCanvasWheel} />
+      <div ref={container}>
+        <canvas ref={specCanvas} class="spectrum-clickable" onClick={handleCanvasClick} onWheel={handleCanvasWheel} />
+        <canvas ref={wfCanvas} class="spectrum-clickable" onClick={handleCanvasClick} onWheel={handleCanvasWheel} />
+      </div>
     </>
   );
 };

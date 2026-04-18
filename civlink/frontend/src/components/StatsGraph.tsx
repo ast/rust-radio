@@ -1,15 +1,11 @@
 import { type Component, createEffect, onMount } from "solid-js";
 import type { StatsSample } from "../api/stats";
+import { theme } from "../theme";
 
 interface StatsGraphProps {
   history: StatsSample[];
   height?: number;
 }
-
-const COLOR_IN = "#4dabf5";
-const COLOR_OUT = "#ffa726";
-const COLOR_GRID = "#2e2e2e";
-const COLOR_TEXT = "#777777";
 
 const StatsGraph: Component<StatsGraphProps> = (props) => {
   let canvas: HTMLCanvasElement | undefined;
@@ -31,8 +27,8 @@ const StatsGraph: Component<StatsGraphProps> = (props) => {
 
     const samples = props.history;
     if (samples.length < 2) {
-      ctx.fillStyle = COLOR_TEXT;
-      ctx.font = "10px 'Share Tech Mono', monospace";
+      ctx.fillStyle = theme.stats.text;
+      ctx.font = "10px var(--font-mono), monospace";
       ctx.fillText("collecting…", 4, 12);
       return;
     }
@@ -44,7 +40,7 @@ const StatsGraph: Component<StatsGraphProps> = (props) => {
     }
     max = Math.ceil(max * 1.2);
 
-    ctx.strokeStyle = COLOR_GRID;
+    ctx.strokeStyle = theme.stats.grid;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       const y = Math.round((cssH * i) / 4) + 0.5;
@@ -68,11 +64,11 @@ const StatsGraph: Component<StatsGraphProps> = (props) => {
       });
       ctx.stroke();
     };
-    plot("kbpsIn", COLOR_IN);
-    plot("kbpsOut", COLOR_OUT);
+    plot("kbpsIn", theme.stats.rx);
+    plot("kbpsOut", theme.stats.tx);
 
-    ctx.fillStyle = COLOR_TEXT;
-    ctx.font = "10px 'Share Tech Mono', monospace";
+    ctx.fillStyle = theme.stats.text;
+    ctx.font = "10px var(--font-mono), monospace";
     ctx.fillText(`${max} kb/s`, 4, 10);
   };
 
